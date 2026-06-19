@@ -1,0 +1,6 @@
+{
+  "name": "GrowInvicta Business Manager",
+  "description": "Comprehensive Business Management Suite for GrowInvicta Agency.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
