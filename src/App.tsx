@@ -40,120 +40,146 @@ import { triggerExcelBackupDownload } from './utils/excelBackup';
 
 
 import LoginScreen from './components/LoginScreen';
+import ResetPasswordScreen from './components/ResetPasswordScreen';
+import { useAuth } from './context/AuthContext';
+import { DbService } from './supabaseService';
 
 export default function App() {
-  // 1. Multi-company tenant directory
-  const [companies, setCompanies] = useState<Array<{ id: string; name: string; adminEmail: string }>>(() => {
-    const saved = localStorage.getItem('growinvicta_registered_companies');
-    if (saved) {
-      try { return JSON.parse(saved); } catch(e){}
-    }
-    return [
-      { id: 'grow_invicta', name: 'GrowInvicta Agency', adminEmail: 'admin@growinvicta.com' },
-      { id: 'apex_retail', name: 'Apex Retail Solutions', adminEmail: 'ananya@apexretail.in' },
-      { id: 'vance_logistics', name: 'Vance Logistics Corp', adminEmail: 'm.vance@vancestrong.com' }
-    ];
-  });
+  const { user, profile, loading: authLoading, signOut } = useAuth();
+  const [dbLoaded, setDbLoaded] = useState(false);
 
-  const [activeCompanyId, setActiveCompanyId] = useState<string>(() => {
-    return localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-  });
-
-  const loadedCompanyIdRef = React.useRef(activeCompanyId);
-
-  // 1b. App State persisted securely in LocalStorage segregated by activeCompanyId
-  const [clients, setClients] = useState<Client[]>(() => {
-    const cid = localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-    const item = localStorage.getItem(`company_${cid}_clients`);
-    return item ? JSON.parse(item) : (cid === 'grow_invicta' ? INITIAL_CLIENTS : []);
-  });
-
-  const [leads, setLeads] = useState<Lead[]>(() => {
-    const cid = localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-    const item = localStorage.getItem(`company_${cid}_leads`);
-    return item ? JSON.parse(item) : (cid === 'grow_invicta' ? INITIAL_LEADS : []);
-  });
-
-  const [projects, setProjects] = useState<Project[]>(() => {
-    const cid = localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-    const item = localStorage.getItem(`company_${cid}_projects`);
-    return item ? JSON.parse(item) : (cid === 'grow_invicta' ? INITIAL_PROJECTS : []);
-  });
-
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    const cid = localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-    const item = localStorage.getItem(`company_${cid}_tasks`);
-    return item ? JSON.parse(item) : (cid === 'grow_invicta' ? INITIAL_TASKS : []);
-  });
-
-  const [payments, setPayments] = useState<Payment[]>(() => {
-    const cid = localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-    const item = localStorage.getItem(`company_${cid}_payments`);
-    return item ? JSON.parse(item) : (cid === 'grow_invicta' ? INITIAL_PAYMENTS : []);
-  });
-
-  const [finances, setFinances] = useState<FinanceLedger[]>(() => {
-    const cid = localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-    const item = localStorage.getItem(`company_${cid}_finances`);
-    return item ? JSON.parse(item) : (cid === 'grow_invicta' ? INITIAL_FINANCE_LETTERS : []);
-  });
-
-  const [reminders, setReminders] = useState<Reminder[]>(() => {
-    const cid = localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-    const item = localStorage.getItem(`company_${cid}_reminders`);
-    return item ? JSON.parse(item) : (cid === 'grow_invicta' ? INITIAL_REMINDERS : []);
-  });
-
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const cid = localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-    const item = localStorage.getItem(`company_${cid}_auditLogs`);
-    return item ? JSON.parse(item) : (cid === 'grow_invicta' ? INITIAL_AUDIT_LOGS : []);
-  });
-
-  const [websites, setWebsites] = useState<Website[]>(() => {
-    const cid = localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-    const item = localStorage.getItem(`company_${cid}_websites`);
-    return item ? JSON.parse(item) : (cid === 'grow_invicta' ? INITIAL_WEBSITES : []);
-  });
-
-  const [timeLogs, setTimeLogs] = useState<TimeLog[]>(() => {
-    const cid = localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-    const item = localStorage.getItem(`company_${cid}_timeLogs`);
-    return item ? JSON.parse(item) : (cid === 'grow_invicta' ? INITIAL_TIME_LOGS : []);
-  });
-  
-  const [profileSettings, setProfileSettings] = useState<ProfileSettings>(() => {
-    const cid = localStorage.getItem('growinvicta_active_company_id') || 'grow_invicta';
-    const item = localStorage.getItem(`company_${cid}_profileSettings`);
-    if (item) return JSON.parse(item);
-    
-    return {
-      companyName: cid === 'grow_invicta' ? 'GrowInvicta' : cid.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      companyLogoUrl: '',
-      personalName: 'Chethan D. M.',
-      email: 'iamchethandm@gmail.com',
-      phone: '+91 98450 12345',
-      role: 'Managing Director & CEO',
-      address: 'Outer Ring Road, Bangalore, KA, IN',
-      timezone: 'Asia/Kolkata (IST)',
-      accentColor: 'indigo'
-    };
+  // States initialized empty, populated by useEffect
+  const [clients, setClients] = useState<Client[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [finances, setFinances] = useState<FinanceLedger[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [websites, setWebsites] = useState<Website[]>([]);
+  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
+  const [profileSettings, setProfileSettings] = useState<ProfileSettings>({
+    companyName: 'GrowInvicta',
+    companyLogoUrl: '',
+    personalName: 'Chethan D. M.',
+    email: 'iamchethandm@gmail.com',
+    phone: '+91 98450 12345',
+    role: 'Managing Director & CEO',
+    address: 'Outer Ring Road, Bangalore, KA, IN',
+    timezone: 'Asia/Kolkata (IST)',
+    accentColor: 'indigo'
   });
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => getStateFromStorage('theme', 'dark'));
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => getStateFromStorage('isSidebarCollapsed', false));
 
-  // Update current user presentation based on profileSettings
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('growinvicta_isAuthenticated') === 'true';
-  });
+  // Current authenticated active role representation
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('Super Admin');
-  const [currentUsername, setCurrentUsername] = useState('Chethan D. M.');
+  const [currentUsername, setCurrentUsername] = useState('User');
+
+  // Sync state parameters from Supabase
+  useEffect(() => {
+    if (!user) {
+      setDbLoaded(false);
+      return;
+    }
+
+    const loadUserData = async () => {
+      setDbLoaded(false);
+      try {
+        const [userClients, userLeads, userProjects, userTasks, userPayments] = await Promise.all([
+          DbService.getClients(user.id),
+          DbService.getLeads(user.id),
+          DbService.getProjects(user.id),
+          DbService.getTasks(user.id),
+          DbService.getPayments(user.id)
+        ]);
+
+        let finalClients = userClients;
+        let finalLeads = userLeads;
+        let finalProjects = userProjects;
+        let finalTasks = userTasks;
+        let finalPayments = userPayments;
+
+        // Auto-seed for fresh user context if completely empty
+        const seededMark = localStorage.getItem(`supabase_user_${user.id}_seeded`);
+        if (!seededMark && userClients.length === 0 && userLeads.length === 0 && userProjects.length === 0 && userTasks.length === 0 && userPayments.length === 0) {
+          finalClients = INITIAL_CLIENTS.map(c => ({ ...c, user_id: user.id }));
+          finalLeads = INITIAL_LEADS.map(l => ({ ...l, user_id: user.id }));
+          finalProjects = INITIAL_PROJECTS.map(p => ({ ...p, user_id: user.id }));
+          finalTasks = INITIAL_TASKS.map(t => ({ ...t, user_id: user.id }));
+          finalPayments = INITIAL_PAYMENTS.map(p => ({ ...p, user_id: user.id }));
+
+          await Promise.all([
+            DbService.saveClients(user.id, finalClients),
+            DbService.saveLeads(user.id, finalLeads),
+            DbService.saveProjects(user.id, finalProjects),
+            DbService.saveTasks(user.id, finalTasks),
+            DbService.savePayments(user.id, finalPayments)
+          ]);
+          localStorage.setItem(`supabase_user_${user.id}_seeded`, 'true');
+        }
+
+        setClients(finalClients);
+        setLeads(finalLeads);
+        setProjects(finalProjects);
+        setTasks(finalTasks);
+        setPayments(finalPayments);
+
+        const getLocalItem = <T,>(key: string, def: T): T => {
+          const item = localStorage.getItem(`user_${user.id}_${key}`);
+          return item ? JSON.parse(item) : def;
+        };
+
+        setFinances(getLocalItem('finances', INITIAL_FINANCE_LETTERS));
+        setReminders(getLocalItem('reminders', INITIAL_REMINDERS));
+        setAuditLogs(getLocalItem('auditLogs', INITIAL_AUDIT_LOGS));
+        setWebsites(getLocalItem('websites', INITIAL_WEBSITES));
+        setTimeLogs(getLocalItem('timeLogs', INITIAL_TIME_LOGS));
+
+        const compName = profile?.company_name || 'My SaaS Business';
+        const fName = profile?.full_name || 'User';
+
+        setProfileSettings(getLocalItem('profileSettings', {
+          companyName: compName,
+          companyLogoUrl: '',
+          personalName: fName,
+          email: user.email || '',
+          phone: '',
+          role: 'Managing Director & CEO',
+          address: '',
+          timezone: 'Asia/Kolkata (IST)',
+          accentColor: 'indigo'
+        }));
+
+        setCurrentUsername(fName);
+      } catch (err) {
+        console.error('Error on loading user data:', err);
+      } finally {
+        setDbLoaded(true);
+      }
+    };
+
+    loadUserData();
+  }, [user, profile]);
 
   // Keep username synced when profile changes
   useEffect(() => {
     setCurrentUsername(profileSettings.personalName);
   }, [profileSettings.personalName]);
+
+  const [isResetPasswordRoute, setIsResetPasswordRoute] = useState<boolean>(() => {
+    return window.location.pathname.includes('/reset-password') || window.location.hash.includes('type=recovery');
+  });
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setIsResetPasswordRoute(window.location.pathname.includes('/reset-password') || window.location.hash.includes('type=recovery'));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // 3. UI Navigation parameters
   const [activeTab, setActiveTab] = useState<
@@ -165,198 +191,74 @@ export default function App() {
   const [isSearchPaletteOpen, setIsSearchPaletteOpen] = useState(false);
   const [globalSearchInput, setGlobalSearchInput] = useState('');
 
-  // Switching helper
-  const switchToCompany = (newCompanyId: string) => {
-    // 1. Save current states to localStorage for the old active company
-    const oldId = loadedCompanyIdRef.current;
-    if (oldId) {
-      localStorage.setItem(`company_${oldId}_clients`, JSON.stringify(clients));
-      localStorage.setItem(`company_${oldId}_leads`, JSON.stringify(leads));
-      localStorage.setItem(`company_${oldId}_projects`, JSON.stringify(projects));
-      localStorage.setItem(`company_${oldId}_tasks`, JSON.stringify(tasks));
-      localStorage.setItem(`company_${oldId}_payments`, JSON.stringify(payments));
-      localStorage.setItem(`company_${oldId}_finances`, JSON.stringify(finances));
-      localStorage.setItem(`company_${oldId}_reminders`, JSON.stringify(reminders));
-      localStorage.setItem(`company_${oldId}_auditLogs`, JSON.stringify(auditLogs));
-      localStorage.setItem(`company_${oldId}_websites`, JSON.stringify(websites));
-      localStorage.setItem(`company_${oldId}_timeLogs`, JSON.stringify(timeLogs));
-      localStorage.setItem(`company_${oldId}_profileSettings`, JSON.stringify(profileSettings));
-    }
-
-    // 2. Set reference first
-    loadedCompanyIdRef.current = newCompanyId;
-    setActiveCompanyId(newCompanyId);
-    localStorage.setItem('growinvicta_active_company_id', newCompanyId);
-
-    // 3. Retrieve and set values for the new active company
-    const prefix = `company_${newCompanyId}_`;
-    const isDemo = newCompanyId === 'grow_invicta';
-    
-    function getLocal<T>(key: string, def: T): T {
-      const item = localStorage.getItem(prefix + key);
-      return item ? JSON.parse(item) : def;
-    }
-
-    setClients(getLocal('clients', isDemo ? INITIAL_CLIENTS : []));
-    setLeads(getLocal('leads', isDemo ? INITIAL_LEADS : []));
-    setProjects(getLocal('projects', isDemo ? INITIAL_PROJECTS : []));
-    setTasks(getLocal('tasks', isDemo ? INITIAL_TASKS : []));
-    setPayments(getLocal('payments', isDemo ? INITIAL_PAYMENTS : []));
-    setFinances(getLocal('finances', isDemo ? INITIAL_FINANCE_LETTERS : []));
-    setReminders(getLocal('reminders', isDemo ? INITIAL_REMINDERS : []));
-    setAuditLogs(getLocal('auditLogs', isDemo ? INITIAL_AUDIT_LOGS : []));
-    setWebsites(getLocal('websites', isDemo ? INITIAL_WEBSITES : []));
-    setTimeLogs(getLocal('timeLogs', isDemo ? INITIAL_TIME_LOGS : []));
-
-    const defaultProfile: ProfileSettings = {
-      companyName: isDemo ? 'GrowInvicta' : newCompanyId.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      companyLogoUrl: '',
-      personalName: 'Chethan D. M.',
-      email: 'iamchethandm@gmail.com',
-      phone: '+91 98450 12345',
-      role: 'Managing Director & CEO',
-      address: 'Outer Ring Road, Bangalore, KA, IN',
-      timezone: 'Asia/Kolkata (IST)',
-      accentColor: 'indigo'
-    };
-    setProfileSettings(getLocal('profileSettings', defaultProfile));
-  };
-
-  const handleRegisterCompany = (companyName: string, adminName: string, email: string) => {
-    const id = companyName.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
-    const newCompany = { id, name: companyName, adminEmail: email };
-    const updated = [...companies, newCompany];
-    setCompanies(updated);
-    localStorage.setItem('growinvicta_registered_companies', JSON.stringify(updated));
-
-    const audit: AuditLog = {
-      id: `audit_${Date.now()}`,
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      user: adminName,
-      role: 'Super Admin',
-      action: 'Register Enterprise Node',
-      details: `Provisioned isolated business container schema for ${companyName} [Tenant ID: ${id}]`
-    };
-
-    localStorage.setItem(`company_${id}_clients`, JSON.stringify([]));
-    localStorage.setItem(`company_${id}_leads`, JSON.stringify([]));
-    localStorage.setItem(`company_${id}_projects`, JSON.stringify([]));
-    localStorage.setItem(`company_${id}_tasks`, JSON.stringify([]));
-    localStorage.setItem(`company_${id}_payments`, JSON.stringify([]));
-    localStorage.setItem(`company_${id}_finances`, JSON.stringify([]));
-    localStorage.setItem(`company_${id}_reminders`, JSON.stringify([]));
-    localStorage.setItem(`company_${id}_auditLogs`, JSON.stringify([audit]));
-    localStorage.setItem(`company_${id}_websites`, JSON.stringify([]));
-    localStorage.setItem(`company_${id}_timeLogs`, JSON.stringify([]));
-
-    const profile: ProfileSettings = {
-      companyName: companyName,
-      companyLogoUrl: '',
-      personalName: adminName,
-      email: email,
-      phone: '',
-      role: 'Managing Director & CEO',
-      address: '',
-      timezone: 'Asia/Kolkata (IST)',
-      accentColor: 'indigo'
-    };
-    localStorage.setItem(`company_${id}_profileSettings`, JSON.stringify(profile));
-  };
-
-  const handleLogin = (companyId: string, role: UserRole, username: string) => {
-    setIsAuthenticated(true);
-    localStorage.setItem('growinvicta_isAuthenticated', 'true');
-    setCurrentUserRole(role);
-    switchToCompany(companyId);
-    
-    // Set customized logged username
-    setProfileSettings(prev => {
-      const updated = {
-        ...prev,
-        personalName: username || prev.personalName,
-        role: prev.role || role
-      };
-      localStorage.setItem(`company_${companyId}_profileSettings`, JSON.stringify(updated));
-      return updated;
-    });
-
-    const log: AuditLog = {
-      id: `a_usr_log_${Date.now()}`,
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      user: username,
-      role: role,
-      action: 'Secure Authentication',
-      details: `Sign-in token authenticated for workspace node ${companyId}`
-    };
-    setAuditLogs(prev => [log, ...prev]);
-  };
-
-  // 4. Persistence synchronization hooks matching selected tenant
+  // Save sync hooks for Supabase CRM tables
   useEffect(() => {
-    if (loadedCompanyIdRef.current === activeCompanyId) {
-      localStorage.setItem(`company_${activeCompanyId}_clients`, JSON.stringify(clients));
+    if (user && dbLoaded) {
+      DbService.saveClients(user.id, clients);
     }
-  }, [clients, activeCompanyId]);
+  }, [clients, user, dbLoaded]);
 
   useEffect(() => {
-    if (loadedCompanyIdRef.current === activeCompanyId) {
-      localStorage.setItem(`company_${activeCompanyId}_leads`, JSON.stringify(leads));
+    if (user && dbLoaded) {
+      DbService.saveLeads(user.id, leads);
     }
-  }, [leads, activeCompanyId]);
+  }, [leads, user, dbLoaded]);
 
   useEffect(() => {
-    if (loadedCompanyIdRef.current === activeCompanyId) {
-      localStorage.setItem(`company_${activeCompanyId}_projects`, JSON.stringify(projects));
+    if (user && dbLoaded) {
+      DbService.saveProjects(user.id, projects);
     }
-  }, [projects, activeCompanyId]);
+  }, [projects, user, dbLoaded]);
 
   useEffect(() => {
-    if (loadedCompanyIdRef.current === activeCompanyId) {
-      localStorage.setItem(`company_${activeCompanyId}_tasks`, JSON.stringify(tasks));
+    if (user && dbLoaded) {
+      DbService.saveTasks(user.id, tasks);
     }
-  }, [tasks, activeCompanyId]);
+  }, [tasks, user, dbLoaded]);
 
   useEffect(() => {
-    if (loadedCompanyIdRef.current === activeCompanyId) {
-      localStorage.setItem(`company_${activeCompanyId}_payments`, JSON.stringify(payments));
+    if (user && dbLoaded) {
+      DbService.savePayments(user.id, payments);
     }
-  }, [payments, activeCompanyId]);
+  }, [payments, user, dbLoaded]);
+
+  // Save sync hooks for auxiliary local-only state collections, isolated by user.id
+  useEffect(() => {
+    if (user && dbLoaded) {
+      localStorage.setItem(`user_${user.id}_finances`, JSON.stringify(finances));
+    }
+  }, [finances, user, dbLoaded]);
 
   useEffect(() => {
-    if (loadedCompanyIdRef.current === activeCompanyId) {
-      localStorage.setItem(`company_${activeCompanyId}_finances`, JSON.stringify(finances));
+    if (user && dbLoaded) {
+      localStorage.setItem(`user_${user.id}_reminders`, JSON.stringify(reminders));
     }
-  }, [finances, activeCompanyId]);
+  }, [reminders, user, dbLoaded]);
 
   useEffect(() => {
-    if (loadedCompanyIdRef.current === activeCompanyId) {
-      localStorage.setItem(`company_${activeCompanyId}_reminders`, JSON.stringify(reminders));
+    if (user && dbLoaded) {
+      localStorage.setItem(`user_${user.id}_auditLogs`, JSON.stringify(auditLogs));
     }
-  }, [reminders, activeCompanyId]);
+  }, [auditLogs, user, dbLoaded]);
 
   useEffect(() => {
-    if (loadedCompanyIdRef.current === activeCompanyId) {
-      localStorage.setItem(`company_${activeCompanyId}_auditLogs`, JSON.stringify(auditLogs));
+    if (user && dbLoaded) {
+      localStorage.setItem(`user_${user.id}_websites`, JSON.stringify(websites));
     }
-  }, [auditLogs, activeCompanyId]);
+  }, [websites, user, dbLoaded]);
 
   useEffect(() => {
-    if (loadedCompanyIdRef.current === activeCompanyId) {
-      localStorage.setItem(`company_${activeCompanyId}_websites`, JSON.stringify(websites));
+    if (user && dbLoaded) {
+      localStorage.setItem(`user_${user.id}_timeLogs`, JSON.stringify(timeLogs));
     }
-  }, [websites, activeCompanyId]);
+  }, [timeLogs, user, dbLoaded]);
 
   useEffect(() => {
-    if (loadedCompanyIdRef.current === activeCompanyId) {
-      localStorage.setItem(`company_${activeCompanyId}_timeLogs`, JSON.stringify(timeLogs));
+    if (user && dbLoaded) {
+      localStorage.setItem(`user_${user.id}_profileSettings`, JSON.stringify(profileSettings));
     }
-  }, [timeLogs, activeCompanyId]);
+  }, [profileSettings, user, dbLoaded]);
 
-  useEffect(() => {
-    if (loadedCompanyIdRef.current === activeCompanyId) {
-      localStorage.setItem(`company_${activeCompanyId}_profileSettings`, JSON.stringify(profileSettings));
-    }
-  }, [profileSettings, activeCompanyId]);
 
   useEffect(() => { saveStateToStorage('theme', theme); }, [theme]);
   useEffect(() => { saveStateToStorage('isSidebarCollapsed', isSidebarCollapsed); }, [isSidebarCollapsed]);
@@ -463,14 +365,34 @@ export default function App() {
   const billingNotifications = getBillingNotifications();
   const totalAlertsCount = reminders.length + billingNotifications.length;
 
-  if (!isAuthenticated) {
+  if (authLoading) {
     return (
-      <LoginScreen 
-        companies={companies}
-        onLogin={handleLogin}
-        onRegisterCompany={handleRegisterCompany}
-        theme={theme}
+      <div className={`min-h-screen flex flex-col items-center justify-center font-mono ${
+        theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-gray-50 text-gray-900'
+      }`}>
+        <div className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-xl flex flex-col items-center gap-3">
+          <Layers className="w-8 h-8 text-indigo-500 animate-spin" />
+          <p className="text-xs font-semibold tracking-wider uppercase text-slate-400">Loading Enterprise Console...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isResetPasswordRoute) {
+    return (
+      <ResetPasswordScreen 
+        theme={theme} 
+        onBackToLogin={() => {
+          setIsResetPasswordRoute(false);
+          window.history.pushState({}, '', '/');
+        }}
       />
+    );
+  }
+
+  if (!user) {
+    return (
+      <LoginScreen theme={theme} />
     );
   }
 
@@ -632,10 +554,10 @@ export default function App() {
           <div className="flex justify-between items-center pt-1 border-t border-slate-850 text-[10px] font-mono text-slate-500">
             {!isSidebarCollapsed && <span>Ver: Enterprise v2.5</span>}
             <button 
-              onClick={() => {
+              onClick={async () => {
                 if(confirm("Verify security logout sequence?")) {
                   writeAuditEntry('Sign out trigger', 'Manual console token expiration scheduled.');
-                  setIsAuthenticated(false);
+                  await signOut();
                 }
               }}
               className="text-rose-450 hover:underline flex items-center gap-0.5 cursor-pointer"

@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { Terminal, Database, Server, Smartphone, BookOpen, Copy, Check, Download, Layers } from 'lucide-react';
+import { SUPABASE_SQL_SCHEMA } from '../supabaseService';
 
 export default function DeveloperConsole() {
   const [activeTab, setActiveTab] = useState<'architecture' | 'db_schema' | 'backend' | 'flutter' | 'deploy'>('architecture');
@@ -60,122 +61,7 @@ export default function DeveloperConsole() {
 |  - Fully Partitioned       |                  | - WHATSAPP BUSINESS API |
 +----------------------------+                  +-------------------------+`;
 
-  const pgDatabaseSchema = `-- GrowInvicta DBMS PostgreSQL Schema Draft
-
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- 1. Users Table (Role-Based Access)
-CREATE TYPE user_role AS ENUM ('Super Admin', 'Manager', 'Employee');
-
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    full_name VARCHAR(100) NOT NULL,
-    role user_role NOT NULL DEFAULT 'Employee',
-    last_login TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 2. Clients Table
-CREATE TABLE clients (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL,
-    company VARCHAR(150) NOT NULL,
-    mobile VARCHAR(20) NOT NULL,
-    whatsapp VARCHAR(20) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    address TEXT,
-    gst_number VARCHAR(15),
-    website VARCHAR(255),
-    notes TEXT,
-    status VARCHAR(50) DEFAULT 'Active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 3. Leads Table
-CREATE TYPE lead_status AS ENUM ('New', 'Contacted', 'Follow Up', 'Proposal Sent', 'Negotiation', 'Won', 'Lost');
-CREATE TYPE lead_source AS ENUM ('Website', 'Facebook', 'Instagram', 'LinkedIn', 'Google Ads', 'Referral', 'Direct Call');
-
-CREATE TABLE leads (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL,
-    company VARCHAR(150),
-    phone VARCHAR(20) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    source lead_source NOT NULL DEFAULT 'Website',
-    status lead_status NOT NULL DEFAULT 'New',
-    value NUMERIC(12,2) DEFAULT 0.00,
-    follow_up_date DATE,
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 4. Projects Table
-CREATE TYPE project_type AS ENUM ('Website Development', 'Shopify Store', 'SEO', 'Social Media Management', 'Google Ads', 'Branding', 'Graphic Design');
-CREATE TYPE project_status AS ENUM ('Not Started', 'In Progress', 'On Hold', 'Completed');
-
-CREATE TABLE projects (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    client_id UUID REFERENCES clients(id) ON DELETE RESTRICT,
-    name VARCHAR(150) NOT NULL,
-    type project_type NOT NULL,
-    budget NUMERIC(12,2) NOT NULL,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    status project_status NOT NULL DEFAULT 'Not Started',
-    priority VARCHAR(50) NOT NULL DEFAULT 'Medium',
-    progress INTEGER DEFAULT 0CHECK (progress >= 0 AND progress <= 100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 5. Tasks Table
-CREATE TYPE task_priority AS ENUM ('Low', 'Medium', 'High', 'Critical');
-CREATE TYPE task_status AS ENUM ('Pending', 'In Progress', 'Review', 'Completed');
-
-CREATE TABLE tasks (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-    assigned_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    title VARCHAR(200) NOT NULL,
-    description TEXT,
-    due_date DATE NOT NULL,
-    priority task_priority NOT NULL DEFAULT 'Medium',
-    status task_status NOT NULL DEFAULT 'Pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 6. Payments Table
-CREATE TYPE payment_mode AS ENUM ('UPI', 'Bank Transfer', 'Cash', 'Credit Card');
-CREATE TYPE payment_status AS ENUM ('Paid', 'Partial', 'Overdue', 'Pending');
-
-CREATE TABLE payments (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    client_id UUID REFERENCES clients(id) ON DELETE RESTRICT,
-    invoice_number VARCHAR(100) UNIQUE NOT NULL,
-    amount NUMERIC(12,2) NOT NULL,
-    paid_amount NUMERIC(12,2) DEFAULT 0.00,
-    pending_amount NUMERIC(12,2) NOT NULL,
-    payment_date DATE,
-    due_date DATE NOT NULL,
-    mode payment_mode NOT NULL,
-    status payment_status NOT NULL DEFAULT 'Pending',
-    gst_amount NUMERIC(12,2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 7. Finances (Income & Expense Ledger)
-CREATE TABLE finance_ledger (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    type VARCHAR(10) CHECK (type IN ('Income', 'Expense')),
-    source_or_name VARCHAR(150) NOT NULL,
-    category VARCHAR(100) NOT NULL,
-    amount NUMERIC(12,2) NOT NULL,
-    date DATE NOT NULL,
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);`;
+  const pgDatabaseSchema = SUPABASE_SQL_SCHEMA;
 
   const expressBackendCode = `/**
  * GrowInvicta Express.js Production Backend Server Template

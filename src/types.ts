@@ -16,6 +16,7 @@ export interface AuditLog {
 
 export interface Client {
   id: string;
+  user_id?: string;
   name: string;
   company: string;
   mobile: string;
@@ -49,6 +50,7 @@ export interface Client {
 
 export interface Lead {
   id: string;
+  user_id?: string;
   name: string;
   company: string;
   phone: string;
@@ -63,6 +65,7 @@ export interface Lead {
 
 export interface Project {
   id: string;
+  user_id?: string;
   name: string;
   clientName: string;
   type: 'Website Development' | 'Shopify Store' | 'SEO' | 'Social Media Management' | 'Google Ads' | 'Branding' | 'Graphic Design';
@@ -90,6 +93,7 @@ export interface Project {
 
 export interface Task {
   id: string;
+  user_id?: string;
   title: string;
   description: string;
   assignedTo: string;
@@ -102,6 +106,7 @@ export interface Task {
 
 export interface Payment {
   id: string;
+  user_id?: string;
   clientName: string;
   invoiceNumber: string;
   amount: number;

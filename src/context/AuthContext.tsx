@@ -1,0 +1,301 @@
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '../supabase';
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  company_name: string;
+  created_at: string;
+}
+
+interface AuthContextType {
+  user: User | null;
+  session: Session | null;
+  profile: UserProfile | null;
+  loading: boolean;
+  signUp: (email: string, password: string, fullName: string, companyName: string) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signOut: () => Promise<{ error: Error | null }>;
+  resetPassword: (email: string) => Promise<{ error: Error | null }>;
+  updatePassword: (password: string) => Promise<{ error: Error | null }>;
+  updateProfile: (fullName: string, companyName: string) => Promise<{ error: Error | null }>;
+  refreshProfile: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Sync profile from 'users' table
+  const fetchProfile = async (userId: string, fallbackEmail?: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+      }
+
+      if (data) {
+        setProfile(data as UserProfile);
+      } else {
+        // If profile doesn't exist, auto-insert a placeholder
+        const newProfile = {
+          id: userId,
+          email: fallbackEmail || '',
+          full_name: user?.user_metadata?.full_name || user?.user_metadata?.name || 'New User',
+          company_name: user?.user_metadata?.company_name || 'GrowInvicta Agency Client',
+          created_at: new Date().toISOString(),
+        };
+        
+        // Suppress any errors if table doesn't exist yet, we will fallback gracefully
+        const { error: insertError } = await supabase.from('users').upsert(newProfile);
+        if (!insertError) {
+          setProfile(newProfile);
+        } else {
+          // If insert fails (table structure not set up yet), define local state fallback profile
+          setProfile(newProfile);
+        }
+      }
+    } catch (err) {
+      console.warn('Profile fetch handler encountered warning (possibly tables not ready):', err);
+      // Fallback
+      setProfile({
+        id: userId,
+        email: fallbackEmail || '',
+        full_name: 'User',
+        company_name: 'GrowInvicta Agency Client',
+        created_at: new Date().toISOString(),
+      });
+    }
+  };
+
+  const refreshProfile = async () => {
+    if (user) {
+      await fetchProfile(user.id, user.email);
+    }
+  };
+
+  useEffect(() => {
+    // 1. Get initial session
+    supabase.auth.getSession().then(({ data: { session: initSession } }) => {
+      setSession(initSession);
+      const currentUser = initSession?.user ?? null;
+      setUser(currentUser);
+      
+      if (currentUser) {
+        fetchProfile(currentUser.id, currentUser.email);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // 2. Listen to Auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        setSession(currentSession);
+        const currentUser = currentSession?.user ?? null;
+        setUser(currentUser);
+
+        if (currentUser) {
+          await fetchProfile(currentUser.id, currentUser.email);
+        } else {
+          setProfile(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Set loading to false once profile is fetched
+  useEffect(() => {
+    if (user && profile) {
+      setLoading(false);
+    } else if (!user) {
+      setLoading(false);
+    }
+  }, [user, profile]);
+
+  // Auth Operations
+  const signUp = async (email: string, password: string, fullName: string, companyName: string) => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            company_name: companyName,
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.user) {
+        // Explicitly create user profile row in public users table
+        const profileObj = {
+          id: data.user.id,
+          email,
+          full_name: fullName,
+          company_name: companyName,
+          created_at: new Date().toISOString(),
+        };
+        
+        const { error: dbError } = await supabase.from('users').upsert(profileObj);
+        if (dbError) {
+          console.warn('Could not insert profile into users table (it might not be created yet):', dbError);
+        }
+      }
+
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
+    }
+  };
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        }
+      });
+      if (error) throw error;
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    try {
+      let redirectTo = `${window.location.origin}/reset-password`;
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        redirectTo = 'http://localhost:3000/reset-password';
+      } else if (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('grow-invicta')) {
+        redirectTo = 'https://grow-invicta.vercel.app/reset-password';
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      });
+      if (error) throw error;
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
+    }
+  };
+
+  const updatePassword = async (password: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
+    }
+  };
+
+  const updateProfile = async (fullName: string, companyName: string) => {
+    try {
+      if (!user) throw new Error('No authenticated user available.');
+      
+      // 1. Update auth user metadata
+      const { error: metaError } = await supabase.auth.updateUser({
+        data: {
+          full_name: fullName,
+          company_name: companyName,
+        }
+      });
+      if (metaError) throw metaError;
+
+      // 2. Update DB row if possible
+      const { error: dbError } = await supabase
+        .from('users')
+        .upsert({
+          id: user.id,
+          email: user.email || '',
+          full_name: fullName,
+          company_name: companyName,
+        });
+      
+      if (dbError) {
+        console.warn('DB profile upsert failed (this is fine if users table not set up/migrated yet):', dbError);
+      }
+
+      // Refresh local profile
+      await fetchProfile(user.id, user.email);
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
+    }
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        profile,
+        loading,
+        signUp,
+        signIn,
+        signInWithGoogle,
+        signOut,
+        resetPassword,
+        updatePassword,
+        updateProfile,
+        refreshProfile,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
