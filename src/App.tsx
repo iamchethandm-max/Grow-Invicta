@@ -9,12 +9,12 @@ import {
   Terminal, ShieldCheck, HelpCircle, LogOut, ChevronRight, Menu, 
   X, Layers, Calendar, FileSpreadsheet, Lock, Sparkles, Send, 
   UserPlus, UserCheck, AlertCircle, FileText, Globe, Clock, User, 
-  PanelLeftClose, PanelLeft, Sun, Moon, Download
+  PanelLeftClose, PanelLeft, Sun, Moon, Download, Archive
 } from 'lucide-react';
 
 import { 
   Client, Lead, Project, Task, Payment, FinanceLedger, Reminder, AuditLog, UserRole, Website, 
-  TimeLog, ProfileSettings 
+  TimeLog, ProfileSettings, ArchivedItem
 } from './types';
 
 import { 
@@ -28,7 +28,7 @@ import Dashboard from './components/Dashboard';
 import ClientsCRM from './components/ClientsCRM';
 import LeadTracker from './components/LeadTracker';
 import ProjectsKanban from './components/ProjectsKanban';
-import TaskPlanner from './components/TaskPlanner';
+
 import FinanceManager from './components/FinanceManager';
 import CalendarView from './components/CalendarView';
 import ReportsCenter from './components/ReportsCenter';
@@ -36,6 +36,7 @@ import DeveloperConsole from './components/DeveloperConsole';
 import WebsitesManager from './components/WebsitesManager';
 import TimeTracker from './components/TimeTracker';
 import ProfilePersonalization from './components/ProfilePersonalization';
+import ArchiveCenter from './components/ArchiveCenter';
 import { triggerExcelBackupDownload } from './utils/excelBackup';
 
 
@@ -45,7 +46,21 @@ import { useAuth } from './context/AuthContext';
 import { DbService } from './supabaseService';
 
 export default function App() {
-  const { user, profile, loading: authLoading, signOut } = useAuth();
+  const { user, session, profile, loading: authLoading, signOut } = useAuth();
+
+  // Trace app rendering, user, and session
+  console.log('[Trace App] Rendering App Component', {
+    hasUser: !!user,
+    userId: user?.id,
+    userEmail: user?.email,
+    hasSession: !!session,
+    sessionExpiresAt: session?.expires_at,
+    hasProfile: !!profile,
+    profileName: profile?.full_name,
+    profileCompany: profile?.company_name,
+    authLoading,
+  });
+
   const [dbLoaded, setDbLoaded] = useState(false);
 
   // States initialized empty, populated by useEffect
@@ -59,6 +74,7 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [websites, setWebsites] = useState<Website[]>([]);
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
+  const [archivedItems, setArchivedItems] = useState<ArchivedItem[]>([]);
   const [profileSettings, setProfileSettings] = useState<ProfileSettings>({
     companyName: 'GrowInvicta',
     companyLogoUrl: '',
@@ -87,6 +103,7 @@ export default function App() {
 
     const loadUserData = async () => {
       setDbLoaded(false);
+      console.log('[Trace App] Database loading initiated for user:', user.id);
       try {
         const [userClients, userLeads, userProjects, userTasks, userPayments] = await Promise.all([
           DbService.getClients(user.id),
@@ -95,6 +112,14 @@ export default function App() {
           DbService.getTasks(user.id),
           DbService.getPayments(user.id)
         ]);
+
+        console.log('[Trace App] Database loading complete:', {
+          clientsCount: userClients.length,
+          leadsCount: userLeads.length,
+          projectsCount: userProjects.length,
+          tasksCount: userTasks.length,
+          paymentsCount: userPayments.length
+        });
 
         let finalClients = userClients;
         let finalLeads = userLeads;
@@ -137,11 +162,12 @@ export default function App() {
         setAuditLogs(getLocalItem('auditLogs', INITIAL_AUDIT_LOGS));
         setWebsites(getLocalItem('websites', INITIAL_WEBSITES));
         setTimeLogs(getLocalItem('timeLogs', INITIAL_TIME_LOGS));
+        setArchivedItems(getLocalItem('archivedItems', []));
 
         const compName = profile?.company_name || 'My SaaS Business';
         const fName = profile?.full_name || 'User';
 
-        setProfileSettings(getLocalItem('profileSettings', {
+        const storedSettings = getLocalItem('profileSettings', {
           companyName: compName,
           companyLogoUrl: '',
           personalName: fName,
@@ -151,9 +177,35 @@ export default function App() {
           address: '',
           timezone: 'Asia/Kolkata (IST)',
           accentColor: 'indigo'
-        }));
+        });
 
-        setCurrentUsername(fName);
+        const metaFullName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
+        const metaCompanyName = user?.user_metadata?.company_name || '';
+
+        // Always sync personalName and companyName with the fetched Supabase profile database values or auth metadata
+        if (profile) {
+          if (profile.full_name && profile.full_name !== 'New User' && profile.full_name !== 'User') {
+            storedSettings.personalName = profile.full_name;
+          } else if (metaFullName && metaFullName !== 'New User' && metaFullName !== 'User') {
+            storedSettings.personalName = metaFullName;
+          }
+
+          if (profile.company_name && profile.company_name !== 'GrowInvicta Agency Client') {
+            storedSettings.companyName = profile.company_name;
+          } else if (metaCompanyName && metaCompanyName !== 'GrowInvicta Agency Client') {
+            storedSettings.companyName = metaCompanyName;
+          }
+        } else {
+          if (metaFullName && metaFullName !== 'New User' && metaFullName !== 'User') {
+            storedSettings.personalName = metaFullName;
+          }
+          if (metaCompanyName && metaCompanyName !== 'GrowInvicta Agency Client') {
+            storedSettings.companyName = metaCompanyName;
+          }
+        }
+
+        setProfileSettings(storedSettings);
+        setCurrentUsername(storedSettings.personalName || fName);
       } catch (err) {
         console.error('Error on loading user data:', err);
       } finally {
@@ -183,7 +235,7 @@ export default function App() {
 
   // 3. UI Navigation parameters
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'clients' | 'leads' | 'projects' | 'tasks' | 'payments' | 'calendar' | 'reports' | 'developer' | 'websites' | 'logs' | 'timetracker' | 'profile'
+    'dashboard' | 'clients' | 'leads' | 'projects' | 'payments' | 'calendar' | 'reports' | 'developer' | 'websites' | 'logs' | 'timetracker' | 'profile' | 'archive'
   >('dashboard');
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -255,6 +307,12 @@ export default function App() {
 
   useEffect(() => {
     if (user && dbLoaded) {
+      localStorage.setItem(`user_${user.id}_archivedItems`, JSON.stringify(archivedItems));
+    }
+  }, [archivedItems, user, dbLoaded]);
+
+  useEffect(() => {
+    if (user && dbLoaded) {
       localStorage.setItem(`user_${user.id}_profileSettings`, JSON.stringify(profileSettings));
     }
   }, [profileSettings, user, dbLoaded]);
@@ -306,7 +364,6 @@ export default function App() {
   const searchResultsCount = 
     searchResults.clients.length + 
     searchResults.projects.length + 
-    searchResults.tasks.length + 
     searchResults.leads.length + 
     searchResults.payments.length;
 
@@ -467,13 +524,13 @@ export default function App() {
               { id: 'clients', label: 'Client CRM Hub', icon: Users },
               { id: 'leads', label: 'Prospective Leads', icon: Sparkles },
               { id: 'projects', label: 'Projects Kanban', icon: Briefcase },
-              { id: 'tasks', label: 'Sprint Planner', icon: CheckSquare },
               { id: 'timetracker', label: 'Clockify Tracker', icon: Clock },
               { id: 'payments', label: 'Payments & Ledger', icon: IndianRupee },
               { id: 'websites', label: 'Websites Manager', icon: Globe },
               { id: 'calendar', label: 'Calendar Planner', icon: Calendar },
               { id: 'reports', label: 'Corporate Reports', icon: FileSpreadsheet },
               { id: 'profile', label: 'Personalize Profile', icon: User },
+              { id: 'archive', label: 'Archived Folder', icon: Archive },
               { id: 'developer', label: 'Developer Center', icon: Terminal },
               { id: 'logs', label: 'Audit Access Logs', icon: ShieldCheck }
             ].map(tab => {
@@ -525,40 +582,12 @@ export default function App() {
             )}
           </div>
 
-          {/* Quick Role switcher RBAC selector */}
-          {!isSidebarCollapsed && (
-            <div className="space-y-1">
-              <span className="text-[9px] uppercase font-mono tracking-wider text-slate-500 font-bold block mb-1">RBAC Authority Level</span>
-              <div className={`grid grid-cols-3 gap-1 p-0.5 rounded-lg border ${
-                theme === 'light' ? 'bg-gray-100 border-gray-200' : 'bg-slate-900 border-slate-850'
-              }`}>
-                {(['Super Admin', 'Manager', 'Employee'] as UserRole[]).map(role => (
-                  <button
-                    key={role}
-                    onClick={() => handleRoleToggle(role)}
-                    className={`py-1 rounded text-[8.5px] font-bold uppercase tracking-tighter cursor-pointer ${
-                      currentUserRole === role 
-                        ? theme === 'light'
-                          ? 'bg-white text-indigo-600 font-extrabold shadow-xs'
-                          : 'bg-slate-950 text-indigo-400 font-extrabold shadow-sm' 
-                        : 'text-slate-500 hover:text-slate-350'
-                    }`}
-                  >
-                    {role.split(' ')[0]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="flex justify-between items-center pt-1 border-t border-slate-850 text-[10px] font-mono text-slate-500">
             {!isSidebarCollapsed && <span>Ver: Enterprise v2.5</span>}
             <button 
               onClick={async () => {
-                if(confirm("Verify security logout sequence?")) {
-                  writeAuditEntry('Sign out trigger', 'Manual console token expiration scheduled.');
-                  await signOut();
-                }
+                writeAuditEntry('Sign out trigger', 'Manual console token expiration scheduled.');
+                await signOut();
               }}
               className="text-rose-450 hover:underline flex items-center gap-0.5 cursor-pointer"
             >
@@ -755,7 +784,20 @@ export default function App() {
               clients={clients}
               onAddClient={(c) => setClients(prev => [...prev, c])}
               onEditClient={(c) => setClients(prev => prev.map(item => item.id === c.id ? c : item))}
-              onDeleteClient={(id) => setClients(prev => prev.filter(item => item.id !== id))}
+              onDeleteClient={(id) => {
+                const target = clients.find(c => c.id === id);
+                if (target) {
+                  const archived: ArchivedItem = {
+                    id: `arch_${Date.now()}_${id}`,
+                    type: 'client',
+                    name: target.company || target.name,
+                    originalData: target,
+                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                  };
+                  setArchivedItems(prev => [archived, ...prev]);
+                }
+                setClients(prev => prev.filter(item => item.id !== id));
+              }}
             />
           )}
 
@@ -764,7 +806,20 @@ export default function App() {
               leads={leads}
               onAddLead={(l) => setLeads(prev => [...prev, l])}
               onEditLead={(l) => setLeads(prev => prev.map(item => item.id === l.id ? l : item))}
-              onDeleteLead={(id) => setLeads(prev => prev.filter(item => item.id !== id))}
+              onDeleteLead={(id) => {
+                const target = leads.find(l => l.id === id);
+                if (target) {
+                  const archived: ArchivedItem = {
+                    id: `arch_${Date.now()}_${id}`,
+                    type: 'lead',
+                    name: target.company || target.name,
+                    originalData: target,
+                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                  };
+                  setArchivedItems(prev => [archived, ...prev]);
+                }
+                setLeads(prev => prev.filter(item => item.id !== id));
+              }}
             />
           )}
 
@@ -775,21 +830,25 @@ export default function App() {
               currentUsername={currentUsername}
               onAddProject={(p) => setProjects(prev => [...prev, p])}
               onEditProject={(p) => setProjects(prev => prev.map(item => item.id === p.id ? p : item))}
-              onDeleteProject={(id) => setProjects(prev => prev.filter(item => item.id !== id))}
+              onDeleteProject={(id) => {
+                const target = projects.find(p => p.id === id);
+                if (target) {
+                  const archived: ArchivedItem = {
+                    id: `arch_${Date.now()}_${id}`,
+                    type: 'project',
+                    name: target.name,
+                    originalData: target,
+                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                  };
+                  setArchivedItems(prev => [archived, ...prev]);
+                }
+                setProjects(prev => prev.filter(item => item.id !== id));
+              }}
               theme={theme}
             />
           )}
 
-          {activeTab === 'tasks' && (
-            <TaskPlanner 
-              tasks={tasks}
-              projects={projects}
-              currentUsername={currentUsername}
-              onAddTask={(t) => setTasks(prev => [...prev, t])}
-              onEditTask={(t) => setTasks(prev => prev.map(item => item.id === t.id ? t : item))}
-              onDeleteTask={(id) => setTasks(prev => prev.filter(item => item.id !== id))}
-            />
-          )}
+
 
           {activeTab === 'payments' && (
             <FinanceManager 
@@ -797,10 +856,36 @@ export default function App() {
               finances={finances}
               onAddPayment={(p) => setPayments(prev => [...prev, p])}
               onEditPayment={(p) => setPayments(prev => prev.map(item => item.id === p.id ? p : item))}
-              onDeletePayment={(id) => setPayments(prev => prev.filter(item => item.id !== id))}
+              onDeletePayment={(id) => {
+                const target = payments.find(p => p.id === id);
+                if (target) {
+                  const archived: ArchivedItem = {
+                    id: `arch_${Date.now()}_${id}`,
+                    type: 'payment',
+                    name: `${target.invoiceNumber} (${target.clientName})`,
+                    originalData: target,
+                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                  };
+                  setArchivedItems(prev => [archived, ...prev]);
+                }
+                setPayments(prev => prev.filter(item => item.id !== id));
+              }}
               onAddFinance={(f) => setFinances(prev => [f, ...prev])}
               onEditFinance={(f) => setFinances(prev => prev.map(item => item.id === f.id ? f : item))}
-              onDeleteFinance={(id) => setFinances(prev => prev.filter(item => item.id !== id))}
+              onDeleteFinance={(id) => {
+                const target = finances.find(f => f.id === id);
+                if (target) {
+                  const archived: ArchivedItem = {
+                    id: `arch_${Date.now()}_${id}`,
+                    type: 'finance',
+                    name: `${target.category} (₹${target.amount})`,
+                    originalData: target,
+                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                  };
+                  setArchivedItems(prev => [archived, ...prev]);
+                }
+                setFinances(prev => prev.filter(item => item.id !== id));
+              }}
             />
           )}
 
@@ -837,7 +922,20 @@ export default function App() {
               clients={clients}
               onAddWebsite={(w) => setWebsites(prev => [...prev, w])}
               onEditWebsite={(w) => setWebsites(prev => prev.map(item => item.id === w.id ? w : item))}
-              onDeleteWebsite={(id) => setWebsites(prev => prev.filter(item => item.id !== id))}
+              onDeleteWebsite={(id) => {
+                const target = websites.find(w => w.id === id);
+                if (target) {
+                  const archived: ArchivedItem = {
+                    id: `arch_${Date.now()}_${id}`,
+                    type: 'website',
+                    name: `${target.name} (${target.url})`,
+                    originalData: target,
+                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                  };
+                  setArchivedItems(prev => [archived, ...prev]);
+                }
+                setWebsites(prev => prev.filter(item => item.id !== id));
+              }}
               onAuditLog={(action, details) => writeAuditEntry(action, details)}
             />
           )}
@@ -861,6 +959,48 @@ export default function App() {
               settings={profileSettings}
               onUpdateSettings={(settings) => {
                 setProfileSettings(settings);
+              }}
+              theme={theme}
+            />
+          )}
+
+          {/* VIEW TAB ARCHIVE CENTER */}
+          {activeTab === 'archive' && (
+            <ArchiveCenter 
+              archivedItems={archivedItems}
+              onRestore={(item) => {
+                setArchivedItems(prev => prev.filter(arch => arch.id !== item.id));
+                switch (item.type) {
+                  case 'client':
+                    setClients(prev => [...prev, item.originalData]);
+                    break;
+                  case 'lead':
+                    setLeads(prev => [...prev, item.originalData]);
+                    break;
+                  case 'project':
+                    setProjects(prev => [...prev, item.originalData]);
+                    break;
+                  case 'task':
+                    setTasks(prev => [...prev, item.originalData]);
+                    break;
+                  case 'payment':
+                    setPayments(prev => [...prev, item.originalData]);
+                    break;
+                  case 'finance':
+                    setFinances(prev => [item.originalData, ...prev]);
+                    break;
+                  case 'website':
+                    setWebsites(prev => [...prev, item.originalData]);
+                    break;
+                }
+                writeAuditEntry('Archive Restored', `Recovered deleted ${item.type}: ${item.name}`);
+              }}
+              onDeletePermanent={(id) => {
+                const target = archivedItems.find(arch => arch.id === id);
+                setArchivedItems(prev => prev.filter(arch => arch.id !== id));
+                if (target) {
+                  writeAuditEntry('Permanent Delete', `Scrubbed archive item: ${target.name}`);
+                }
               }}
               theme={theme}
             />
@@ -972,22 +1112,7 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Task results matching */}
-                    {searchResults.tasks.length > 0 && (
-                      <div className="space-y-2">
-                        <span className="text-[9px] uppercase font-mono tracking-wider font-bold text-amber-500">Match Sprint Tasks ({searchResults.tasks.length})</span>
-                        {searchResults.tasks.map(t => (
-                          <div 
-                            key={t.id} 
-                            onClick={() => { setActiveTab('tasks'); setIsSearchPaletteOpen(false); }}
-                            className="p-2.5 bg-slate-950 border border-slate-850 rounded-lg hover:border-slate-500 cursor-pointer block text-xs"
-                          >
-                            <span className="font-bold text-slate-100">{t.title}</span>
-                            <span className="text-slate-450 text-[10px] block font-mono">Assign: {t.assignedTo} &bull; Project: {t.project}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+
 
                     {/* Lead results matching */}
                     {searchResults.leads.length > 0 && (

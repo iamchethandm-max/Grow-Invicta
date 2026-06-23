@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState<boolean>(true);
 
   // Sync profile from 'users' table
-  const fetchProfile = async (userId: string, fallbackEmail?: string) => {
+  const fetchProfile = async (userId: string, fallbackEmail?: string, currentUserObj?: User | null) => {
     try {
       const { data, error } = await supabase
         .from('users')
@@ -46,6 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('Error fetching user profile:', error);
       }
 
+      const activeUser = currentUserObj || user;
+
       if (data) {
         setProfile(data as UserProfile);
       } else {
@@ -53,8 +55,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const newProfile = {
           id: userId,
           email: fallbackEmail || '',
-          full_name: user?.user_metadata?.full_name || user?.user_metadata?.name || 'New User',
-          company_name: user?.user_metadata?.company_name || 'GrowInvicta Agency Client',
+          full_name: activeUser?.user_metadata?.full_name || activeUser?.user_metadata?.name || 'New User',
+          company_name: activeUser?.user_metadata?.company_name || 'GrowInvicta Agency Client',
           created_at: new Date().toISOString(),
         };
         
@@ -82,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshProfile = async () => {
     if (user) {
-      await fetchProfile(user.id, user.email);
+      await fetchProfile(user.id, user.email, user);
     }
   };
 
@@ -94,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(currentUser);
       
       if (currentUser) {
-        fetchProfile(currentUser.id, currentUser.email);
+        fetchProfile(currentUser.id, currentUser.email, currentUser);
       } else {
         setLoading(false);
       }
@@ -108,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentUser);
 
         if (currentUser) {
-          await fetchProfile(currentUser.id, currentUser.email);
+          await fetchProfile(currentUser.id, currentUser.email, currentUser);
         } else {
           setProfile(null);
         }
@@ -195,15 +197,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      await supabase.auth.signOut();
+    } catch (err: any) {
+      console.warn('Supabase auth.signOut encountered an error, clearing state locally:', err);
+    } finally {
       setUser(null);
       setSession(null);
       setProfile(null);
-      return { error: null };
-    } catch (err: any) {
-      return { error: err };
     }
+    return { error: null };
   };
 
   const resetPassword = async (email: string) => {
@@ -240,13 +242,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!user) throw new Error('No authenticated user available.');
       
       // 1. Update auth user metadata
-      const { error: metaError } = await supabase.auth.updateUser({
+      const { data: authData, error: metaError } = await supabase.auth.updateUser({
         data: {
           full_name: fullName,
           company_name: companyName,
         }
       });
       if (metaError) throw metaError;
+
+      // Update local state immediately with new auth user info
+      if (authData?.user) {
+        setUser(authData.user);
+      }
+
+      const updatedUser = authData?.user || user;
 
       // 2. Update DB row if possible
       const { error: dbError } = await supabase
@@ -263,7 +272,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Refresh local profile
-      await fetchProfile(user.id, user.email);
+      await fetchProfile(user.id, user.email, updatedUser);
       return { error: null };
     } catch (err: any) {
       return { error: err };

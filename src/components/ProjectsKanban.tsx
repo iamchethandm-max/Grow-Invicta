@@ -125,7 +125,7 @@ export default function ProjectsKanban({
     // 2. Map all existing projects associated with the old column name to the new name!
     projects.forEach(p => {
       if (p.status === oldName) {
-        onEditProject({ ...p, status: newName });
+        onEditProject({ ...p, status: newName as any });
       }
     });
 
@@ -135,16 +135,14 @@ export default function ProjectsKanban({
 
   // Deleting custom list
   const handleDeleteColumn = (colName: string) => {
-    if (confirm(`Are you sure you want to delete the "${colName}" list? All cards in this list will be re-assigned to "${columns[0] || 'Unassigned'}".`)) {
-      // Re-assign cards to first column
-      const defaultDest = columns.find(c => c !== colName) || 'Not Started';
-      projects.forEach(p => {
-        if (p.status === colName) {
-          onEditProject({ ...p, status: defaultDest });
-        }
-      });
-      setColumns(columns.filter(c => c !== colName));
-    }
+    // Re-assign cards to first column
+    const defaultDest = columns.find(c => c !== colName) || 'Not Started';
+    projects.forEach(p => {
+      if (p.status === colName) {
+        onEditProject({ ...p, status: defaultDest as any });
+      }
+    });
+    setColumns(columns.filter(c => c !== colName));
   };
 
   // Rapid Inline Card Creation
@@ -201,6 +199,22 @@ export default function ProjectsKanban({
     onEditProject(updated);
     if (selectedProject?.id === p.id) {
       setSelectedProject(updated);
+    }
+  };
+
+  // Card Drag and Drop handler
+  const handleCardDrop = (projId: string, targetCol: string) => {
+    const proj = projects.find(p => p.id === projId);
+    if (proj && proj.status !== targetCol) {
+      const updated = {
+        ...proj,
+        status: targetCol as any,
+        progress: targetCol === 'Completed' ? 100 : proj.progress
+      };
+      onEditProject(updated);
+      if (selectedProject?.id === proj.id) {
+        setSelectedProject(updated);
+      }
     }
   };
 
@@ -307,7 +321,6 @@ export default function ProjectsKanban({
   const handleDeleteMilestone = (milestoneId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Avoid triggering toggle on click
     if (!selectedProject) return;
-    if (!confirm("Are you sure you want to delete this checklist task?")) return;
     const currentMilestones = selectedProject.milestones.filter(m => m.id !== milestoneId);
 
     const completedCount = currentMilestones.length > 0 ? currentMilestones.filter(m => m.completed).length : 0;
@@ -506,7 +519,15 @@ export default function ProjectsKanban({
                 </div>
 
                 {/* Cards Container */}
-                <div className="space-y-3 flex-1 overflow-y-auto max-h-[500px] pr-1">
+                <div 
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const projId = e.dataTransfer.getData('text/plain');
+                    if (projId) handleCardDrop(projId, col);
+                  }}
+                  className="space-y-3 flex-1 overflow-y-auto max-h-[500px] pr-1"
+                >
                   {columnProjects.map(proj => {
                     const tags = selectedTags[proj.id] || [];
                     const isSelected = selectedProject?.id === proj.id;
@@ -515,6 +536,10 @@ export default function ProjectsKanban({
                       <div
                         key={proj.id}
                         onClick={() => setSelectedProject(proj)}
+                        draggable="true"
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', proj.id);
+                        }}
                         className={`p-4 rounded-xl border transition-all cursor-pointer text-left relative group ${
                           isSelected 
                             ? isLight ? 'bg-white border-indigo-550 ring-1 ring-indigo-550/30' : 'bg-slate-900 border-indigo-500 ring-1 ring-indigo-505/30'
@@ -548,11 +573,9 @@ export default function ProjectsKanban({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (confirm(`Are you sure you want to permanently delete this task board card: ${proj.name}?`)) {
-                                  onDeleteProject(proj.id);
-                                  if (selectedProject?.id === proj.id) {
-                                    setSelectedProject(null);
-                                  }
+                                onDeleteProject(proj.id);
+                                if (selectedProject?.id === proj.id) {
+                                  setSelectedProject(null);
                                 }
                               }}
                               className="p-1 rounded-md text-rose-550 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
@@ -768,10 +791,8 @@ export default function ProjectsKanban({
                 {currentUserRole === 'Super Admin' && (
                   <button
                     onClick={() => {
-                      if (confirm(`Deprovision project board for ${selectedProject.name}?`)) {
-                        onDeleteProject(selectedProject.id);
-                        setSelectedProject(projects.find(p => p.id !== selectedProject.id) || null);
-                      }
+                      onDeleteProject(selectedProject.id);
+                      setSelectedProject(projects.find(p => p.id !== selectedProject.id) || null);
                     }}
                     className="px-3 py-1.5 text-xs text-rose-400 bg-rose-950/20 border border-rose-500/20 rounded-lg hover:bg-rose-900/40 cursor-pointer"
                   >

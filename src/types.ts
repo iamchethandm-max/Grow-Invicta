@@ -32,6 +32,9 @@ export interface Client {
     projectsCount: number;
     totalBilled: number;
     pendingInvoice: number;
+    workStartDate?: string;
+    workType?: 'retainer' | 'one-time';
+    monthlyRetainerAmount?: number;
   };
   contracts: Array<{
     id: string;
@@ -175,5 +178,13 @@ export interface ProfileSettings {
   address: string;
   timezone: string;
   accentColor: string;
+}
+
+export interface ArchivedItem {
+  id: string;
+  type: 'client' | 'lead' | 'project' | 'task' | 'payment' | 'website' | 'finance' | 'timeLog';
+  name: string;
+  originalData: any;
+  archivedAt: string;
 }
 

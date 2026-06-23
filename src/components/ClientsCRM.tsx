@@ -38,6 +38,9 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
   const [formWebsite, setFormWebsite] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formStatus, setFormStatus] = useState<'Active' | 'Inactive'>('Active');
+  const [formWorkStartDate, setFormWorkStartDate] = useState('');
+  const [formWorkType, setFormWorkType] = useState<'retainer' | 'one-time'>('retainer');
+  const [formMonthlyRetainerAmount, setFormMonthlyRetainerAmount] = useState<number | ''>('');
 
   // Documents simulation state
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>({
@@ -76,6 +79,9 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
     setFormWebsite('');
     setFormNotes('');
     setFormStatus('Active');
+    setFormWorkStartDate('');
+    setFormWorkType('retainer');
+    setFormMonthlyRetainerAmount('');
     setIsAddOpen(true);
   };
 
@@ -90,6 +96,9 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
     setFormWebsite(c.website);
     setFormNotes(c.notes);
     setFormStatus(c.status);
+    setFormWorkStartDate(c.metrics?.workStartDate || '');
+    setFormWorkType(c.metrics?.workType || 'retainer');
+    setFormMonthlyRetainerAmount(c.metrics?.monthlyRetainerAmount || '');
     setIsEditOpen(true);
   };
 
@@ -110,7 +119,14 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
       notes: formNotes,
       status: formStatus,
       createdAt: new Date().toISOString().split('T')[0],
-      metrics: { projectsCount: 0, totalBilled: 0, pendingInvoice: 0 },
+      metrics: { 
+        projectsCount: 0, 
+        totalBilled: 0, 
+        pendingInvoice: 0,
+        workStartDate: formWorkStartDate || undefined,
+        workType: formWorkType,
+        monthlyRetainerAmount: formMonthlyRetainerAmount !== '' ? Number(formMonthlyRetainerAmount) : undefined
+      },
       contracts: [],
       timeline: [
         { id: `t_${Date.now()}`, date: new Date().toISOString().split('T')[0], type: 'meeting', description: 'CRM entry created.' }
@@ -126,7 +142,7 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
     e.preventDefault();
     if (!selectedClient) return;
 
-    const updatedClient = {
+    const updatedClient: Client = {
       ...selectedClient,
       name: formName,
       company: formCompany,
@@ -137,7 +153,13 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
       gstNumber: formGst,
       website: formWebsite,
       notes: formNotes,
-      status: formStatus
+      status: formStatus,
+      metrics: {
+        ...selectedClient.metrics,
+        workStartDate: formWorkStartDate || undefined,
+        workType: formWorkType,
+        monthlyRetainerAmount: formMonthlyRetainerAmount !== '' ? Number(formMonthlyRetainerAmount) : undefined
+      }
     };
 
     onEditClient(updatedClient);
@@ -349,6 +371,20 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
                     {selectedClient.website !== 'Not Applicable' ? 'Open link' : '--'}
                   </a>
                 </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase tracking-wider font-mono">Work Started From</span>
+                  <span className="text-indigo-300 font-mono font-medium">{selectedClient.metrics?.workStartDate || '--'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase tracking-wider font-mono">Agreement Type</span>
+                  <span className="text-indigo-300 font-mono font-medium capitalize">{selectedClient.metrics?.workType || 'Retainer'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase tracking-wider font-mono">Monthly Retainer agreed</span>
+                  <span className="text-emerald-400 font-mono font-medium">
+                    {selectedClient.metrics?.monthlyRetainerAmount ? `₹${selectedClient.metrics.monthlyRetainerAmount.toLocaleString('en-IN')}` : '₹0'}
+                  </span>
+                </div>
               </div>
 
               {/* Address and Notes */}
@@ -366,57 +402,6 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
 
             {/* Contract list & Activity Logs tabs */}
             <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-5">
-              <div>
-                <h3 className="text-xs font-semibold text-white uppercase tracking-wider font-mono mb-3">
-                  SLA Agreements & Active Retainers
-                </h3>
-                {selectedClient.contracts?.length > 0 ? (
-                  <div className="space-y-2 mb-4">
-                    {selectedClient.contracts.map(con => (
-                      <div key={con.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-slate-400" />
-                          <div>
-                            <span className="font-semibold text-slate-200">{con.title}</span>
-                            <p className="text-[10px] text-slate-400 font-mono">{con.date}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-mono text-white block">₹{con.value.toLocaleString('en-IN')}</span>
-                          <span className="text-[9px] font-bold text-emerald-400">APPROVED</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-slate-500 text-xs font-mono py-2">No contractual files logged on file.</p>
-                )}
-
-                {/* Add new agreement simulation */}
-                <div className="p-3.5 bg-slate-950/60 rounded-xl border border-slate-850 flex flex-col md:flex-row gap-3">
-                  <input
-                    type="text"
-                    placeholder="New Contract Title (e.g. Graphic retainers)"
-                    value={newContractTitle}
-                    onChange={(e) => setNewContractTitle(e.target.value)}
-                    className="flex-1 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs text-white"
-                  />
-                  <input
-                    type="number"
-                    placeholder="SLA Value (INR)"
-                    value={newContractValue || ''}
-                    onChange={(e) => setNewContractValue(Number(e.target.value))}
-                    className="w-full md:w-36 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs text-white font-mono"
-                  />
-                  <button
-                    onClick={handleAddContract}
-                    className="bg-indigo-600 hover:bg-indigo-750 text-white px-4 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
-                  >
-                    Issue
-                  </button>
-                </div>
-              </div>
-
               {/* Uploaded Dossier Document Center */}
               <div>
                 <h3 className="text-xs font-semibold text-white uppercase tracking-wider font-mono mb-3">
@@ -613,6 +598,39 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
                 />
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-y border-slate-800/60 py-3">
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Work Start Date</label>
+                  <input 
+                    type="date" 
+                    value={formWorkStartDate} 
+                    onChange={e => setFormWorkStartDate(e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white font-mono" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Agreement Type</label>
+                  <select 
+                    value={formWorkType} 
+                    onChange={e => setFormWorkType(e.target.value as any)} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white"
+                  >
+                    <option value="retainer">Retainer</option>
+                    <option value="one-time">One-Time</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Monthly Retainer (Agreed)</label>
+                  <input 
+                    type="number" 
+                    value={formMonthlyRetainerAmount} 
+                    onChange={e => setFormMonthlyRetainerAmount(e.target.value === '' ? '' : Number(e.target.value))} 
+                    placeholder="INR"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white font-mono" 
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Key Objectives & Requirements</label>
                 <textarea 
@@ -753,6 +771,39 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
                   onChange={e => setFormAddress(e.target.value)} 
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white" 
                 />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-y border-slate-800/60 py-3">
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Work Start Date</label>
+                  <input 
+                    type="date" 
+                    value={formWorkStartDate} 
+                    onChange={e => setFormWorkStartDate(e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white font-mono" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Agreement Type</label>
+                  <select 
+                    value={formWorkType} 
+                    onChange={e => setFormWorkType(e.target.value as any)} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white"
+                  >
+                    <option value="retainer">Retainer</option>
+                    <option value="one-time">One-Time</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Monthly Retainer (Agreed)</label>
+                  <input 
+                    type="number" 
+                    value={formMonthlyRetainerAmount} 
+                    onChange={e => setFormMonthlyRetainerAmount(e.target.value === '' ? '' : Number(e.target.value))} 
+                    placeholder="INR"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white font-mono" 
+                  />
+                </div>
               </div>
 
               <div>

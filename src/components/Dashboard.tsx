@@ -28,6 +28,18 @@ export default function Dashboard({
   currentUsername = 'Chethan D. M.',
   companyName = 'GrowInvicta'
 }: DashboardProps) {
+  // Console trace of dashboard rendering and passed data
+  console.log('[Trace Dashboard] Rendering Dashboard component', {
+    clientsLength: clients?.length,
+    leadsLength: leads?.length,
+    projectsLength: projects?.length,
+    tasksLength: tasks?.length,
+    paymentsLength: payments?.length,
+    financesLength: finances?.length,
+    currentUsername,
+    companyName
+  });
+
   // 1. KPI Calculations
   const activeClients = clients.filter(c => c.status === 'Active').length;
   const activeProj = projects.filter(p => p.status === 'In Progress').length;
@@ -102,7 +114,7 @@ export default function Dashboard({
             <span className="text-slate-400 text-xs font-mono">UTC: 2026-06-19 07:13:52</span>
           </div>
           <h1 className="text-2xl font-bold text-white mt-1.5 font-sans tracking-tight">
-            Welcome back, {currentUsername.split(' ')[0]}
+            Welcome back, {currentUsername}
           </h1>
           <p className="text-slate-400 text-xs mt-0.5">
             {companyName === 'GrowInvicta' ? 'GrowInvicta' : companyName}'s running rate is up <strong className="text-emerald-400 font-medium">+14.2%</strong> this fiscal quarter. Invoices are reconciling smoothly.

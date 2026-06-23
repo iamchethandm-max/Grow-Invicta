@@ -174,10 +174,8 @@ export default function WebsitesManager({
 
   // Delete website handler
   const handleDeleteTrigger = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to remove '${name}' from monitoring?`)) {
-      onDeleteWebsite(id);
-      onAuditLog('Website Deleted', `Removed '${name}' from agency monitors.`);
-    }
+    onDeleteWebsite(id);
+    onAuditLog('Website Deleted', `Removed '${name}' from agency monitors.`);
   };
 
   const resetForm = () => {

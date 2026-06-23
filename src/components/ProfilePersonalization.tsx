@@ -66,6 +66,19 @@ export default function ProfilePersonalization({ settings, onUpdateSettings, the
     return () => clearInterval(timer);
   }, []);
 
+  // Sync states if settings prop updates dynamically (e.g. from database sync)
+  useEffect(() => {
+    setCompanyName(settings.companyName);
+    setPersonalName(settings.personalName);
+    setEmail(settings.email);
+    setPhone(settings.phone);
+    setRole(settings.role);
+    setAddress(settings.address);
+    setTimezone(settings.timezone);
+    setAccentColor(settings.accentColor);
+    setLogoUrl(settings.companyLogoUrl);
+  }, [settings]);
+
   const handleRefreshSession = async () => {
     setIsRefreshingToken(true);
     // Simulate real interactive oauth refresh handshake
@@ -211,7 +224,7 @@ export default function ProfilePersonalization({ settings, onUpdateSettings, the
       // Sign user out to lock further console activity
       await signOut();
       
-      alert('Secure node de-provisioned successfully. Redirecting in 2 seconds.');
+      console.log('Secure node de-provisioned successfully. Reloading screen.');
       window.location.reload();
     } catch (err: any) {
       setDeleteStateError(err.message || 'Critical failure terminating user instance.');
