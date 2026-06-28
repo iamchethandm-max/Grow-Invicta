@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Layers, Mail, Lock, User, PlusCircle, ArrowRight, Check, AlertCircle, HelpCircle } from 'lucide-react';
+import { Layers, Mail, Lock, User, PlusCircle, ArrowRight, Check, AlertCircle, HelpCircle, Eye, EyeOff } from 'lucide-react';
 
 interface LoginScreenProps {
   theme: 'dark' | 'light';
@@ -18,6 +18,9 @@ export default function LoginScreen({ theme }: LoginScreenProps) {
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
   
+  // Visibility state
+  const [showPassword, setShowPassword] = useState(false);
+  
   // Status states
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -30,6 +33,7 @@ export default function LoginScreen({ theme }: LoginScreenProps) {
 
   const handleModeChange = (newMode: 'signin' | 'signup' | 'forgot') => {
     setMode(newMode);
+    setShowPassword(false); // Reset visibility on mode change
     clearMessages();
   };
 
@@ -75,6 +79,8 @@ export default function LoginScreen({ theme }: LoginScreenProps) {
     if (error) {
       setErrorMsg(error.message || 'Could not register new SaaS account.');
     } else {
+      localStorage.setItem(`is_new_signup_${email.toLowerCase()}`, 'true');
+      localStorage.setItem('awaiting_verification', 'true');
       setSuccessMsg('Account registered successfully! An email verification has been issued. Please check your inbox to verify your corporate account.');
     }
   };
@@ -225,17 +231,25 @@ export default function LoginScreen({ theme }: LoginScreenProps) {
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     placeholder="••••••••"
-                    className={`w-full pl-11 pr-4 py-3 text-sm rounded-xl border outline-none transition-all ${
+                    className={`w-full pl-11 pr-11 py-3 text-sm rounded-xl border outline-none transition-all ${
                       isLight 
                         ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500' 
                         : 'bg-slate-950 border-slate-800 text-slate-150 focus:border-indigo-500'
                     }`}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-350 dark:hover:text-slate-200 focus:outline-none cursor-pointer"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                  </button>
                 </div>
               </div>
 
@@ -323,17 +337,25 @@ export default function LoginScreen({ theme }: LoginScreenProps) {
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     placeholder="At least 6 characters"
-                    className={`w-full pl-11 pr-4 py-3 text-sm rounded-xl border outline-none transition-all ${
+                    className={`w-full pl-11 pr-11 py-3 text-sm rounded-xl border outline-none transition-all ${
                       isLight 
                         ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500' 
                         : 'bg-slate-950 border-slate-800 text-slate-150 focus:border-indigo-500'
                     }`}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-350 dark:hover:text-slate-200 focus:outline-none cursor-pointer"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                  </button>
                 </div>
               </div>
 

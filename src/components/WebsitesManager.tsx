@@ -10,6 +10,9 @@ import {
   User, Server, CheckCircle2, X, Activity, CreditCard
 } from 'lucide-react';
 import { Website, Client } from '../types';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
+import { formatIndianDate } from '../utils/dateUtils';
+
 
 interface WebsitesManagerProps {
   websites: Website[];
@@ -40,6 +43,7 @@ export default function WebsitesManager({
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
+  const [websiteToDelete, setWebsiteToDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Form Field States
   const [formName, setFormName] = useState('');
@@ -174,8 +178,7 @@ export default function WebsitesManager({
 
   // Delete website handler
   const handleDeleteTrigger = (id: string, name: string) => {
-    onDeleteWebsite(id);
-    onAuditLog('Website Deleted', `Removed '${name}' from agency monitors.`);
+    setWebsiteToDelete({ id, name });
   };
 
   const resetForm = () => {
@@ -459,7 +462,7 @@ export default function WebsitesManager({
                       </div>
                       <p className="text-slate-400 text-[11px] mt-0.5">
                         Provider: <span className="text-slate-300 font-mono">{alert.registrarOrProvider}</span> &bull; 
-                        Bill Date: <span className="text-slate-300 font-mono font-semibold">{alert.date}</span> &bull; 
+                        Bill Date: <span className="text-slate-300 font-mono font-semibold">{formatIndianDate(alert.date)}</span> &bull; 
                         Renew Value: <span className="text-emerald-400 font-bold font-mono">INR {alert.price.toLocaleString('en-IN')}</span>
                       </p>
                     </div>
@@ -627,7 +630,7 @@ export default function WebsitesManager({
                     <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-850 flex justify-between items-center text-xs">
                       <div className="truncate pr-2">
                         <p className="text-[11px] font-bold text-slate-200 truncate">{web.hostingProvider}</p>
-                        <span className="text-[9.5px] text-slate-500 block font-mono">Renew: {web.hostingBillDate}</span>
+                        <span className="text-[9.5px] text-slate-500 block font-mono">Renew: {formatIndianDate(web.hostingBillDate)}</span>
                       </div>
                       
                       <div className="text-right flex-shrink-0">
@@ -661,7 +664,7 @@ export default function WebsitesManager({
                     <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-850 flex justify-between items-center text-xs">
                       <div className="truncate pr-2">
                         <p className="text-[11px] font-bold text-slate-200 truncate">{web.domainRegistrar}</p>
-                        <span className="text-[9.5px] text-slate-500 block font-mono">Renew: {web.domainBillDate}</span>
+                        <span className="text-[9.5px] text-slate-500 block font-mono">Renew: {formatIndianDate(web.domainBillDate)}</span>
                       </div>
                       
                       <div className="text-right flex-shrink-0">
@@ -1116,6 +1119,21 @@ export default function WebsitesManager({
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!websiteToDelete}
+        onClose={() => setWebsiteToDelete(null)}
+        onConfirm={() => {
+          if (websiteToDelete) {
+            onDeleteWebsite(websiteToDelete.id);
+            onAuditLog('Website Deleted', `Removed '${websiteToDelete.name}' from agency monitors.`);
+          }
+        }}
+        title="Delete Website Monitor"
+        message="Are you sure you want to delete this website monitor? This action will permanently stop uptime and performance tracking."
+        itemName={websiteToDelete?.name}
+      />
 
     </div>
   );

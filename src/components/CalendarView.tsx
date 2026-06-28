@@ -3,12 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Calendar as CalendarIcon, Clock, CheckCircle2, ChevronLeft, 
   ChevronRight, ArrowUpRight, Sparkles, AlertCircle, RefreshCw, Info
 } from 'lucide-react';
 import { Task, Project, Payment } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { formatIndianDate } from '../utils/dateUtils';
 
 interface CalendarViewProps {
   tasks: Task[];
@@ -18,12 +20,83 @@ interface CalendarViewProps {
 }
 
 export default function CalendarView({ tasks, projects, payments, onTriggerOAuth }: CalendarViewProps) {
+  const { session, signInWithGoogle } = useAuth();
   const [calendarViewMode, setCalendarViewMode] = useState<'Month' | 'Week' | 'Day'>('Month');
   const [currentCalendarMonth, setCurrentCalendarMonth] = useState('June 2026');
 
-  // Google Calendar integration status simulation
+  // Google Calendar integration status and state
   const [isGoogleSynced, setIsGoogleSynced] = useState(false);
   const [syncLogs, setSyncLogs] = useState<string[]>([]);
+  const [googleEvents, setGoogleEvents] = useState<any[]>([]);
+  const [isLoadingGoogle, setIsLoadingGoogle] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  const fetchGoogleCalendarEvents = async (token: string) => {
+    setIsLoadingGoogle(true);
+    setGoogleError(null);
+    setSyncLogs(prev => [...prev, 'Fetching events from primary Google Calendar...']);
+    try {
+      // Fetch events for June 2026
+      const timeMin = new Date('2026-06-01T00:00:00Z').toISOString();
+      const timeMax = new Date('2026-07-01T00:00:00Z').toISOString();
+      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`;
+      
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Google API returned status ${res.status}: ${errText}`);
+      }
+      
+      const data = await res.json();
+      const items = data.items || [];
+      
+      const parsed = items.map((item: any) => {
+        const startStr = item.start?.dateTime || item.start?.date || '';
+        const startDateOnly = startStr.substring(0, 10); // "YYYY-MM-DD"
+        const startTimeOnly = item.start?.dateTime ? startStr.substring(11, 16) : 'All Day';
+        
+        return {
+          id: item.id,
+          title: item.summary || 'Google Calendar Event',
+          description: item.description || '',
+          dateStr: startDateOnly,
+          timeStr: startTimeOnly,
+          type: 'Google Event',
+          color: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+        };
+      });
+      
+      setGoogleEvents(parsed);
+      setIsGoogleSynced(true);
+      setSyncLogs(prev => [
+        ...prev,
+        `Success: Synchronized ${parsed.length} events from Google Calendar.`,
+        `Connected context: ${session?.user?.email || 'iamchethandm@gmail.com'}`
+      ]);
+    } catch (err: any) {
+      console.warn(err);
+      setGoogleError(err.message || 'OAuth token missing or expired.');
+      setSyncLogs(prev => [
+        ...prev,
+        `Sync error: ${err.message || 'Access token invalid/expired. Please re-authenticate.'}`
+      ]);
+      setIsGoogleSynced(false);
+    } finally {
+      setIsLoadingGoogle(false);
+    }
+  };
+
+  // Auto-fetch if token is available
+  useEffect(() => {
+    if (session?.provider_token) {
+      fetchGoogleCalendarEvents(session.provider_token);
+    }
+  }, [session?.provider_token]);
 
   // We are in June 2026. June 1st, 2026 is a Monday.
   // Generate 35 calendar day boxes covering June 2026.
@@ -45,32 +118,48 @@ export default function CalendarView({ tasks, projects, payments, onTriggerOAuth
       id: t.id,
       title: t.title,
       type: 'Task Due',
-      color: 'bg-indigo-600 border-indigo-700 text-indigo-200'
+      color: 'bg-indigo-600 border-indigo-700 text-indigo-200',
+      timeStr: 'Due Today'
     }));
 
     const dayProjects = projects.filter(p => p.endDate === dateStr).map(p => ({
       id: p.id,
       title: `DEADLINE: ${p.name}`,
       type: 'Project Cutoff',
-      color: 'bg-red-500/20 border-red-500/40 text-red-300'
+      color: 'bg-red-500/20 border-red-500/40 text-red-300',
+      timeStr: 'All Day'
     }));
 
     const dayPayments = payments.filter(pay => pay.dueDate === dateStr).map(pay => ({
       id: pay.id,
       title: `PAYMENT OUTSTANDING: ${pay.invoiceNumber}`,
       type: 'Bill Due',
-      color: 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+      color: 'bg-amber-500/20 border-amber-500/40 text-amber-300',
+      timeStr: 'Due'
     }));
 
-    return [...dayTasks, ...dayProjects, ...dayPayments];
+    const dayGoogleEvents = googleEvents.filter(e => e.dateStr === dateStr);
+
+    return [...dayTasks, ...dayProjects, ...dayPayments, ...dayGoogleEvents];
   };
 
   const activeDayEvents = getEventsForDate('2026-06-19'); // Selected default day is today (June 19th)
 
-  const handleRunGoogleSync = () => {
-    setSyncLogs(['Initiating OAuth workflow with Google Calendar scopes...', 'Connected to iamchethandm@gmail.com security context.', 'Synchronizing active projects and invoices...']);
-    onTriggerOAuth();
-    setIsGoogleSynced(true);
+  const handleRunGoogleSync = async () => {
+    setSyncLogs(prev => [...prev, 'Initiating Google Calendar synchronization...']);
+    onTriggerOAuth(); // Log the action in audit trail
+    
+    const googleScopes = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
+    
+    if (session?.provider_token) {
+      await fetchGoogleCalendarEvents(session.provider_token);
+    } else {
+      setSyncLogs(prev => [...prev, 'Authenticating session with Google scopes...']);
+      const { error } = await signInWithGoogle(googleScopes);
+      if (error) {
+        setSyncLogs(prev => [...prev, `OAuth authentication failed: ${error.message}`]);
+      }
+    }
   };
 
   return (
@@ -112,18 +201,54 @@ export default function CalendarView({ tasks, projects, payments, onTriggerOAuth
         </button>
       </div>
 
-      {/* Sync status logging dashboard if enabled */}
-      {isGoogleSynced && (
-        <div className="bg-slate-900 border border-indigo-500/20 p-4 rounded-xl flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5 text-xs text-slate-300">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <p className="font-mono">
-              <strong>Google Session Sync:</strong> Automated calendar imports active under requested scopes.
-            </p>
+      {/* Sync status logging dashboard if enabled or loading/error */}
+      {(isGoogleSynced || isLoadingGoogle || googleError || syncLogs.length > 0) && (
+        <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-3">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div className="flex items-center gap-2.5 text-xs text-slate-300">
+              {isLoadingGoogle ? (
+                <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin" />
+              ) : googleError ? (
+                <AlertCircle className="w-4 h-4 text-rose-500" />
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              )}
+              <p className="font-mono">
+                <strong>Google Session Sync:</strong>{' '}
+                {isLoadingGoogle 
+                  ? 'Re-indexing cloud accounts...' 
+                  : googleError 
+                    ? 'Sync authorization interrupted.' 
+                    : 'Automated calendar imports active under requested scopes.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {googleError && (
+                <button
+                  onClick={handleRunGoogleSync}
+                  className="px-2 py-1 bg-rose-950 text-rose-300 border border-rose-850 hover:bg-rose-900 rounded text-[10px] font-mono transition-colors cursor-pointer"
+                >
+                  Authorize Google Calendar Scopes
+                </button>
+              )}
+              <span className="text-[10px] bg-indigo-950/40 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded font-mono">
+                CONNECTED: {session?.user?.email || 'iamchethandm@gmail.com'}
+              </span>
+            </div>
           </div>
-          <span className="text-[10px] bg-indigo-950/40 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded font-mono">
-            CONNECTED: iamchethandm@gmail.com
-          </span>
+
+          {/* Sync logs container */}
+          {syncLogs.length > 0 && (
+            <div className="bg-slate-950/85 border border-slate-850 p-3 rounded-lg max-h-[120px] overflow-y-auto space-y-1">
+              <span className="text-[9px] uppercase font-mono tracking-wider text-slate-500 block border-b border-slate-900 pb-1 mb-1">Live Sync Logs</span>
+              {syncLogs.slice(-4).map((log, lIdx) => (
+                <div key={lIdx} className="text-[10.5px] font-mono text-slate-400 flex items-start gap-1.5">
+                  <span className="text-indigo-500 select-none">&gt;</span>
+                  <p>{log}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -190,7 +315,7 @@ export default function CalendarView({ tasks, projects, payments, onTriggerOAuth
             <div>
               <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-4">
                 <span className="text-xs font-bold font-mono text-slate-400 uppercase">Today Agenda checklist</span>
-                <span className="text-[10px] text-slate-500 font-mono">June 19th, 2026</span>
+                <span className="text-[10px] text-slate-500 font-mono">{formatIndianDate('2026-06-19')}</span>
               </div>
 
               <div className="space-y-3 overflow-y-auto max-h-[380px] pr-1">

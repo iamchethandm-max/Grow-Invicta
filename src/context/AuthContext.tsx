@@ -17,7 +17,7 @@ interface AuthContextType {
   loading: boolean;
   signUp: (email: string, password: string, fullName: string, companyName: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signInWithGoogle: (scopes?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<{ error: Error | null }>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
   updatePassword: (password: string) => Promise<{ error: Error | null }>;
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching user profile:', error);
+        console.warn('Notice: fetching user profile returned error (using local state fallback):', error);
       }
 
       const activeUser = currentUserObj || user;
@@ -139,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email,
         password,
         options: {
+          emailRedirectTo: window.location.origin,
           data: {
             full_name: fullName,
             company_name: companyName,
@@ -180,12 +181,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (scopes?: string) => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: window.location.origin,
+          scopes: scopes,
+          queryParams: scopes ? {
+            access_type: 'offline',
+            prompt: 'consent',
+          } : undefined,
         }
       });
       if (error) throw error;

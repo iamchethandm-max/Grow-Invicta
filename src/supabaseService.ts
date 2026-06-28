@@ -148,7 +148,7 @@ export const DbService = {
         .eq('user_id', userId);
 
       if (error) {
-        console.error('[Supabase Error] getClients failed:', error);
+        console.warn('[Supabase Sync] getClients failed, using local fallback:', error);
         if (isTableMissingError(error)) {
           return getLocalBackup<Client[]>('clients', userId, []);
         }
@@ -202,12 +202,12 @@ export const DbService = {
 
       if (fetchError) {
         if (isTableMissingError(fetchError)) return;
-        console.error('[Supabase Error] Fetching clients for delete sync failed:', fetchError);
+        console.warn('[Supabase Sync] Fetching clients for delete sync failed:', fetchError);
       } else if (dbItems) {
         const toDelete = dbItems.filter(item => !clientIds.includes(item.id));
         for (const item of toDelete) {
           const { error: delError } = await supabase.from('clients').delete().eq('id', item.id);
-          if (delError) console.error(`[Supabase Error] failed to delete client ${item.id}:`, delError);
+          if (delError) console.warn(`[Supabase Sync] failed to delete client ${item.id}:`, delError);
         }
       }
 
@@ -234,7 +234,7 @@ export const DbService = {
       for (const record of dbRecords) {
         const { error } = await supabase.from('clients').upsert(record);
         if (error) {
-          console.error(`[Supabase Error] failed to upsert client ${record.id}:`, error);
+          console.warn(`[Supabase Sync] failed to upsert client ${record.id}:`, error);
           if (isTableMissingError(error)) break;
         }
       }
@@ -252,7 +252,7 @@ export const DbService = {
         .eq('user_id', userId);
 
       if (error) {
-        console.error('[Supabase Error] getLeads failed:', error);
+        console.warn('[Supabase Sync] getLeads failed, using local fallback:', error);
         if (isTableMissingError(error)) {
           return getLocalBackup<Lead[]>('leads', userId, []);
         }
@@ -302,12 +302,12 @@ export const DbService = {
 
       if (fetchError) {
         if (isTableMissingError(fetchError)) return;
-        console.error('[Supabase Error] Fetching leads for delete sync failed:', fetchError);
+        console.warn('[Supabase Sync] Fetching leads for delete sync failed:', fetchError);
       } else if (dbItems) {
         const toDelete = dbItems.filter(item => !leadIds.includes(item.id));
         for (const item of toDelete) {
           const { error: delError } = await supabase.from('leads').delete().eq('id', item.id);
-          if (delError) console.error(`[Supabase Error] failed to delete lead ${item.id}:`, delError);
+          if (delError) console.warn(`[Supabase Sync] failed to delete lead ${item.id}:`, delError);
         }
       }
 
@@ -329,7 +329,7 @@ export const DbService = {
       for (const record of dbRecords) {
         const { error } = await supabase.from('leads').upsert(record);
         if (error) {
-          console.error(`[Supabase Error] failed to upsert lead ${record.id}:`, error);
+          console.warn(`[Supabase Sync] failed to upsert lead ${record.id}:`, error);
           if (isTableMissingError(error)) break;
         }
       }
@@ -347,7 +347,7 @@ export const DbService = {
         .eq('user_id', userId);
 
       if (error) {
-        console.error('[Supabase Error] getProjects failed:', error);
+        console.warn('[Supabase Sync] getProjects failed, using local fallback:', error);
         if (isTableMissingError(error)) {
           return getLocalBackup<Project[]>('projects', userId, []);
         }
@@ -399,12 +399,12 @@ export const DbService = {
 
       if (fetchError) {
         if (isTableMissingError(fetchError)) return;
-        console.error('[Supabase Error] Fetching projects for delete sync failed:', fetchError);
+        console.warn('[Supabase Sync] Fetching projects for delete sync failed:', fetchError);
       } else if (dbItems) {
         const toDelete = dbItems.filter(item => !projectIds.includes(item.id));
         for (const item of toDelete) {
           const { error: delError } = await supabase.from('projects').delete().eq('id', item.id);
-          if (delError) console.error(`[Supabase Error] failed to delete project ${item.id}:`, delError);
+          if (delError) console.warn(`[Supabase Sync] failed to delete project ${item.id}:`, delError);
         }
       }
 
@@ -428,7 +428,7 @@ export const DbService = {
       for (const record of dbRecords) {
         const { error } = await supabase.from('projects').upsert(record);
         if (error) {
-          console.error(`[Supabase Error] failed to upsert project ${record.id}:`, error);
+          console.warn(`[Supabase Sync] failed to upsert project ${record.id}:`, error);
           if (isTableMissingError(error)) break;
         }
       }
@@ -446,7 +446,7 @@ export const DbService = {
         .eq('user_id', userId);
 
       if (error) {
-        console.error('[Supabase Error] getTasks failed:', error);
+        console.warn('[Supabase Sync] getTasks failed, using local fallback:', error);
         if (isTableMissingError(error)) {
           return getLocalBackup<Task[]>('tasks', userId, []);
         }
@@ -494,12 +494,12 @@ export const DbService = {
 
       if (fetchError) {
         if (isTableMissingError(fetchError)) return;
-        console.error('[Supabase Error] Fetching tasks for delete sync failed:', fetchError);
+        console.warn('[Supabase Sync] Fetching tasks for delete sync failed:', fetchError);
       } else if (dbItems) {
         const toDelete = dbItems.filter(item => !taskIds.includes(item.id));
         for (const item of toDelete) {
           const { error: delError } = await supabase.from('tasks').delete().eq('id', item.id);
-          if (delError) console.error(`[Supabase Error] failed to delete task ${item.id}:`, delError);
+          if (delError) console.warn(`[Supabase Sync] failed to delete task ${item.id}:`, delError);
         }
       }
 
@@ -519,7 +519,7 @@ export const DbService = {
       for (const record of dbRecords) {
         const { error } = await supabase.from('tasks').upsert(record);
         if (error) {
-          console.error(`[Supabase Error] failed to upsert task ${record.id}:`, error);
+          console.warn(`[Supabase Sync] failed to upsert task ${record.id}:`, error);
           if (isTableMissingError(error)) break;
         }
       }
@@ -537,7 +537,7 @@ export const DbService = {
         .eq('user_id', userId);
 
       if (error) {
-        console.error('[Supabase Error] getPayments failed:', error);
+        console.warn('[Supabase Sync] getPayments failed, using local fallback:', error);
         if (isTableMissingError(error)) {
           return getLocalBackup<Payment[]>('payments', userId, []);
         }
@@ -587,12 +587,12 @@ export const DbService = {
 
       if (fetchError) {
         if (isTableMissingError(fetchError)) return;
-        console.error('[Supabase Error] Fetching payments for delete sync failed:', fetchError);
+        console.warn('[Supabase Sync] Fetching payments for delete sync failed:', fetchError);
       } else if (dbItems) {
         const toDelete = dbItems.filter(item => !paymentIds.includes(item.id));
         for (const item of toDelete) {
           const { error: delError } = await supabase.from('payments').delete().eq('id', item.id);
-          if (delError) console.error(`[Supabase Error] failed to delete payment ${item.id}:`, delError);
+          if (delError) console.warn(`[Supabase Sync] failed to delete payment ${item.id}:`, delError);
         }
       }
 
@@ -614,7 +614,7 @@ export const DbService = {
       for (const record of dbRecords) {
         const { error } = await supabase.from('payments').upsert(record);
         if (error) {
-          console.error(`[Supabase Error] failed to upsert payment ${record.id}:`, error);
+          console.warn(`[Supabase Sync] failed to upsert payment ${record.id}:`, error);
           if (isTableMissingError(error)) break;
         }
       }

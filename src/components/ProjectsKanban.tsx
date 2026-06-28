@@ -2,9 +2,49 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, Edit, Trash2, Calendar, CheckSquare, 
   MessageSquare, Paperclip, Clipboard, Play, 
-  AlertCircle, X, ArrowLeft, ArrowRight, MoreHorizontal, Maximize2, Tag
+  AlertCircle, X, ArrowLeft, ArrowRight, MoreHorizontal, Maximize2, Tag,
+  Clock, Eye
 } from 'lucide-react';
 import { Project, UserRole } from '../types';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
+import { formatIndianDate } from '../utils/dateUtils';
+
+// Helpers to match visual aesthetics from screenshot
+const getPillColor = (proj: Project) => {
+  const colors = [
+    'bg-[#2563eb]', // Royal Blue
+    'bg-[#db2777]', // Hot Pink / Magenta
+    'bg-[#06b6d4]', // Bright Cyan
+    'bg-[#e11d48]', // Rose / Pinkish Red
+    'bg-[#f59e0b]', // Golden Amber
+    'bg-[#10b981]', // Emerald Green
+  ];
+  let hash = 0;
+  const str = proj.clientName + proj.name;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+};
+
+const formatDate = (dateStr: string) => {
+  return formatIndianDate(dateStr);
+};
+
+const getInitials = (proj: Project) => {
+  if (proj.teamMembers && proj.teamMembers.length > 0) {
+    const firstTeamMember = proj.teamMembers[0];
+    const parts = firstTeamMember.split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    } else if (parts.length === 1 && parts[0]) {
+      return parts[0].substring(0, 2).toUpperCase();
+    }
+  }
+  return 'CN'; // Fallback signature initials as seen in screenshot
+};
+
 
 interface ProjectsKanbanProps {
   projects: Project[];
@@ -40,6 +80,7 @@ export default function ProjectsKanban({
   // View States
   const [activeBoardView, setActiveBoardView] = useState<'Kanban' | 'Timeline' | 'Grid'>('Kanban');
   const [selectedProject, setSelectedProject] = useState<Project | null>(projects[0] || null);
+  const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Dynamic Column actions
   const [newColName, setNewColName] = useState('');
@@ -452,247 +493,293 @@ export default function ProjectsKanban({
 
       {/* 2. MAIN KANBAN BOARD VIEW */}
       {activeBoardView === 'Kanban' && (
-        <div className="flex gap-4 overflow-x-auto pb-4 pt-1 select-none">
-          {columns.map((col, index) => {
-            const columnProjects = projects.filter(p => p.status === col);
-            const isEditing = editingColIdx === index;
+        <div className={`p-6 rounded-2xl border transition-all ${
+          isLight 
+            ? 'bg-gradient-to-br from-indigo-50/40 via-purple-50/30 to-pink-50/20 border-indigo-100 shadow-sm' 
+            : 'bg-gradient-to-br from-[#121320] via-[#24133b] to-[#121320] border-slate-900 shadow-2xl'
+        }`}>
+          <div className="flex gap-4 overflow-x-auto pb-4 pt-1 select-none">
+            {columns.map((col, index) => {
+              const columnProjects = projects.filter(p => p.status === col);
+              const isEditing = editingColIdx === index;
 
-            return (
-              <div 
-                key={col} 
-                className={`w-72 p-4 rounded-2xl border flex flex-col flex-shrink-0 transition-all ${
-                  isLight ? 'bg-gray-50 border-gray-200 shadow-sm' : 'bg-slate-900/50 border-slate-850'
-                }`}
-                style={{ maxHeight: 'calc(100vh - 220px)' }}
-              >
-                
-                {/* Column header */}
-                <div className="flex justify-between items-center mb-3 pb-2 border-b border-indigo-500/10">
-                  <div className="flex-1 min-w-0 pr-1">
-                    {isEditing ? (
-                      <input 
-                        type="text" 
-                        value={editingColName}
-                        onChange={e => setEditingColName(e.target.value)}
-                        onBlur={() => handleRenameColumn(index)}
-                        onKeyDown={e => e.key === 'Enter' && handleRenameColumn(index)}
-                        autoFocus
-                        className={`text-xs font-bold leading-normal w-full px-1 py-0.5 rounded ${
-                          isLight ? 'bg-white border-gray-300 text-gray-900' : 'bg-slate-950 text-white border-slate-800'
-                        }`}
-                      />
-                    ) : (
-                      <h3 
-                        onClick={() => {
-                          if (currentUserRole !== 'Employee') {
-                            setEditingColIdx(index);
-                            setEditingColName(col);
-                          }
-                        }}
-                        className={`text-xs font-semibold uppercase tracking-wider font-mono truncate cursor-pointer hover:underline ${
-                          isLight ? 'text-gray-900' : 'text-indigo-400'
-                        }`}
-                        title="Click to rename list"
-                      >
-                        {col}
-                      </h3>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <span className={`text-[10px] px-2 py-0.2 rounded-full font-mono font-bold ${
-                      isLight ? 'bg-gray-200 text-gray-700' : 'bg-slate-950 text-slate-400'
-                    }`}>
-                      {columnProjects.length}
-                    </span>
-                    
-                    {currentUserRole !== 'Employee' && (
-                      <button 
-                        onClick={() => handleDeleteColumn(col)}
-                        className="text-slate-400 hover:text-rose-500 cursor-pointer p-0.5"
-                        title="Delete list"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Cards Container */}
+              return (
                 <div 
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const projId = e.dataTransfer.getData('text/plain');
-                    if (projId) handleCardDrop(projId, col);
-                  }}
-                  className="space-y-3 flex-1 overflow-y-auto max-h-[500px] pr-1"
+                  key={col} 
+                  className={`w-72 p-4 rounded-2xl border flex flex-col flex-shrink-0 transition-all ${
+                    isLight 
+                      ? 'bg-white/80 border-gray-200 shadow-xs' 
+                      : 'bg-[#0c0d10]/95 border-slate-900 shadow-lg'
+                  }`}
+                  style={{ maxHeight: 'calc(100vh - 220px)' }}
                 >
-                  {columnProjects.map(proj => {
-                    const tags = selectedTags[proj.id] || [];
-                    const isSelected = selectedProject?.id === proj.id;
+                  
+                  {/* Column header */}
+                  <div className="flex justify-between items-center mb-4 pl-1 pr-0.5 flex-shrink-0">
+                    <div className="flex-1 min-w-0 pr-1">
+                      {isEditing ? (
+                        <input 
+                          type="text" 
+                          value={editingColName}
+                          onChange={e => setEditingColName(e.target.value)}
+                          onBlur={() => handleRenameColumn(index)}
+                          onKeyDown={e => e.key === 'Enter' && handleRenameColumn(index)}
+                          autoFocus
+                          className={`text-xs font-bold leading-normal w-full px-1.5 py-0.5 rounded outline-none ${
+                            isLight ? 'bg-white border-gray-300 text-gray-900' : 'bg-slate-950 text-white border-slate-800'
+                          }`}
+                        />
+                      ) : (
+                        <h3 
+                          onClick={() => {
+                            if (currentUserRole !== 'Employee') {
+                              setEditingColIdx(index);
+                              setEditingColName(col);
+                            }
+                          }}
+                          className={`text-[13px] font-semibold tracking-wide font-sans truncate cursor-pointer hover:underline ${
+                            isLight ? 'text-slate-800' : 'text-slate-100'
+                          }`}
+                          title="Click to rename list"
+                        >
+                          {col}
+                        </h3>
+                      )}
+                    </div>
 
-                    return (
-                      <div
-                        key={proj.id}
-                        onClick={() => setSelectedProject(proj)}
-                        draggable="true"
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData('text/plain', proj.id);
-                        }}
-                        className={`p-4 rounded-xl border transition-all cursor-pointer text-left relative group ${
-                          isSelected 
-                            ? isLight ? 'bg-white border-indigo-550 ring-1 ring-indigo-550/30' : 'bg-slate-900 border-indigo-500 ring-1 ring-indigo-505/30'
-                            : isLight ? 'bg-white hover:bg-gray-100 border-gray-200' : 'bg-slate-950 hover:bg-slate-900/50 border-slate-850'
-                        }`}
-                      >
-                        {/* Tags list representation */}
-                        {tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-2">
-                            {tags.map((t, i) => (
-                              <span 
-                                key={i} 
-                                className="text-[7.5px] font-mono leading-none px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400"
-                              >
-                                {t}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex gap-1.5 items-center">
-                            <span className={`px-1.5 py-0.2 rounded text-[8px] font-mono font-semibold uppercase ${
-                              proj.priority === 'Critical' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
-                              proj.priority === 'High' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                              proj.priority === 'Medium' ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-500/15 text-slate-400'
-                            }`}>
-                              {proj.priority}
-                            </span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={`text-[11px] font-sans font-medium ${
+                        isLight ? 'text-slate-500' : 'text-slate-400'
+                      }`}>
+                        {columnProjects.length}
+                      </span>
+                      
+                      {/* Three-dots column actions menu */}
+                      <div className="relative group/colmenu">
+                        <button 
+                          className="text-slate-500 hover:text-slate-350 cursor-pointer p-0.5 rounded hover:bg-slate-800/30 transition-colors"
+                          title="List Actions"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                        {currentUserRole !== 'Employee' && (
+                          <div className="absolute right-0 top-full mt-1 hidden group-hover/colmenu:block bg-slate-950 border border-slate-850 rounded-lg shadow-xl py-1.5 w-32 z-50 text-left">
                             <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteProject(proj.id);
-                                if (selectedProject?.id === proj.id) {
-                                  setSelectedProject(null);
-                                }
+                              onClick={() => {
+                                setEditingColIdx(index);
+                                setEditingColName(col);
                               }}
-                              className="p-1 rounded-md text-rose-550 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
-                              title="Delete task card"
+                              className="w-full text-[10.5px] text-slate-300 hover:text-white hover:bg-slate-900 px-3 py-1.5 text-left"
                             >
-                              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                              Rename list
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteColumn(col)}
+                              className="w-full text-[10.5px] text-rose-450 hover:text-rose-350 hover:bg-rose-950/20 px-3 py-1.5 text-left"
+                            >
+                              Delete list
                             </button>
                           </div>
-                          <span className={`text-[8.5px] font-mono ${isLight ? 'text-gray-400' : 'text-slate-500'}`}>{proj.startDate}</span>
-                        </div>
-
-                        <h4 className={`text-xs font-bold leading-snug font-display ${isLight ? 'text-gray-900' : 'text-slate-100'}`}>
-                          {proj.name}
-                        </h4>
-                        <p className={`text-[10px] mt-0.5 font-mono mb-2 ${isLight ? 'text-gray-500' : 'text-slate-400'}`}>
-                          {proj.clientName}
-                        </p>
-
-                        {/* Checklist ticks */}
-                        <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-indigo-500/5 justify-between">
-                          <div className="flex items-center gap-1 text-[9.5px] font-mono text-slate-500">
-                            <CheckSquare className="w-3.5 h-3.5" />
-                            <span>
-                              {proj.milestones.filter(m => m.completed).length}/{proj.milestones.length} Ticks
-                            </span>
-                          </div>
-                          
-                          {/* Fast Move Buttons - Left & Right click controls */}
-                          <div className="flex items-center gap-0.5 opacity-60 hover:opacity-100 transition-opacity">
-                            {index > 0 && (
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleShiftCard(proj, 'left'); }}
-                                className={`p-1 rounded hover:bg-slate-800 hover:text-white cursor-pointer`}
-                                title="Move card left"
-                              >
-                                <ArrowLeft className="w-3 h-3 text-slate-400" />
-                              </button>
-                            )}
-                            
-                            {/* List Selector dropdown */}
-                            <select
-                              value={proj.status}
-                              onClick={e => e.stopPropagation()}
-                              onChange={e => handleShiftCard(proj, e.target.value)}
-                              className={`text-[8.5px] font-mono rounded bg-transparent border-none py-0.5 px-1 outline-none text-slate-400 hover:text-indigo-400`}
-                            >
-                              {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-
-                            {index < columns.length - 1 && (
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleShiftCard(proj, 'right'); }}
-                                className={`p-1 rounded hover:bg-slate-800 hover:text-white cursor-pointer`}
-                                title="Move card right"
-                              >
-                                <ArrowRight className="w-3 h-3 text-slate-400" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Progress Bar indicator */}
-                        <div className="w-full h-1 bg-slate-950 rounded-full mt-2 overflow-hidden">
-                          <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${proj.progress}%` }} />
-                        </div>
-
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Inline Quick Add list item */}
-                <div className="mt-3">
-                  {activeQuickAddCol === col ? (
-                    <div className="space-y-2 animate-fadeIn">
-                      <input 
-                        type="text" 
-                        placeholder="Define item title..."
-                        value={quickCardName}
-                        onChange={e => setQuickCardName(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && handleQuickAddCard(col)}
-                        autoFocus
-                        className={`w-full text-xs p-2.5 rounded-lg outline-none ${
-                          isLight ? 'bg-white border border-gray-300 text-gray-900' : 'bg-slate-950 border border-slate-800 text-white'
-                        }`}
-                      />
-                      <div className="flex gap-1.5">
-                        <button 
-                          onClick={() => handleQuickAddCard(col)}
-                          className="px-3 py-1 bg-indigo-600 hover:bg-indigo-750 text-white text-[10px] font-semibold rounded-lg cursor-pointer"
-                        >
-                          Add Card
-                        </button>
-                        <button 
-                          onClick={() => { setActiveQuickAddCol(null); setQuickCardName(''); }}
-                          className={`px-3 py-1 text-[11px] rounded-lg ${isLight ? 'text-gray-600 hover:bg-gray-200' : 'text-slate-400 hover:bg-slate-850'}`}
-                        >
-                          Cancel
-                        </button>
+                        )}
                       </div>
                     </div>
-                  ) : (
-                    <button
-                      onClick={() => setActiveQuickAddCol(col)}
-                      className={`w-full py-2 border border-dashed rounded-xl text-center text-xs flex items-center justify-center gap-1.5 font-medium transition-all cursor-pointer ${
-                        isLight ? 'bg-gray-100 hover:bg-gray-200 border-gray-300 text-gray-700' : 'bg-slate-950 hover:bg-slate-850 border-slate-850/60 text-slate-400'
-                      }`}
-                    >
-                      <Plus className="w-4 h-4 text-slate-400" />
-                      <span>Add a card</span>
-                    </button>
-                  )}
-                </div>
+                  </div>
 
-              </div>
-            );
-          })}
+                  {/* Cards Container */}
+                  <div 
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const projId = e.dataTransfer.getData('text/plain');
+                      if (projId) handleCardDrop(projId, col);
+                    }}
+                    className="space-y-3 flex-1 overflow-y-auto max-h-[500px] pr-1"
+                  >
+                    {columnProjects.map(proj => {
+                      const tags = selectedTags[proj.id] || [];
+                      const isSelected = selectedProject?.id === proj.id;
+
+                      return (
+                        <div
+                          key={proj.id}
+                          onClick={() => setSelectedProject(proj)}
+                          draggable="true"
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('text/plain', proj.id);
+                          }}
+                          className={`rounded-xl p-3 border transition-all cursor-pointer text-left relative group ${
+                            isSelected 
+                              ? isLight 
+                                ? 'bg-white border-indigo-500 ring-1 ring-indigo-500/30' 
+                                : 'bg-[#1e2026] border-indigo-500/80 ring-1 ring-indigo-500/30'
+                              : isLight 
+                                ? 'bg-white hover:bg-slate-50 border-gray-150 shadow-xs' 
+                                : 'bg-[#18191d] hover:bg-[#1f2025] border-slate-900/60 shadow-md'
+                          }`}
+                        >
+                          {/* Top Row: Colored Pill Capsule + hover edit/delete actions */}
+                          <div className="flex justify-between items-center mb-2.5">
+                            {/* Accent pill capsule */}
+                            <div className={`h-1.5 w-9 rounded-full ${getPillColor(proj)}`} />
+                            
+                            {/* Action icons, showing smoothly on hover */}
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEdit(proj);
+                                }}
+                                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                                title="Edit specs"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              {currentUserRole !== 'Employee' && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setProjectToDelete({ id: proj.id, name: proj.name });
+                                  }}
+                                  className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 transition-colors cursor-pointer"
+                                  title="Archive Card"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Task Card Title */}
+                          <h4 className={`text-[13px] font-medium leading-snug font-sans tracking-wide ${
+                            isLight ? 'text-slate-800' : 'text-slate-100'
+                          }`}>
+                            {proj.name}
+                          </h4>
+
+                          {/* Sub-label/Client Name */}
+                          <p className={`text-[11px] mt-0.5 font-sans ${
+                            isLight ? 'text-slate-500' : 'text-slate-400'
+                          }`}>
+                            {proj.clientName}
+                          </p>
+
+                          {/* Render tag pill labels if available */}
+                          {tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {tags.map((t, i) => (
+                                <span 
+                                  key={i} 
+                                  className="text-[8px] font-sans font-semibold leading-none px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400"
+                                >
+                                  {t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Bottom Row: Date Badge + Checklist Progress + Assignee Avatar */}
+                          <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-slate-900/40">
+                            <div className="flex flex-wrap items-center gap-2">
+                              {/* Red/Coral Date Badge */}
+                              {proj.endDate && (
+                                <div className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-sans font-medium ${
+                                  isLight 
+                                    ? 'bg-red-50 text-red-600 border border-red-100' 
+                                    : 'bg-[#2a1b1b] text-red-300 border border-red-950/40'
+                                }`}>
+                                  <Clock className="w-3 h-3 flex-shrink-0" />
+                                  <span>{formatDate(proj.endDate)}</span>
+                                </div>
+                              )}
+
+                              {/* Checklist Progress Badge */}
+                              {proj.milestones && proj.milestones.length > 0 && (
+                                <div className={`flex items-center gap-1.5 text-[10px] font-medium font-sans ${
+                                  isLight ? 'text-slate-500' : 'text-slate-400'
+                                }`}>
+                                  <CheckSquare className="w-3.5 h-3.5 flex-shrink-0 text-slate-500" />
+                                  <span>
+                                    {proj.milestones.filter(m => m.completed).length}/{proj.milestones.length}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Assignee initials badge */}
+                            <div 
+                              className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-xs select-none ${
+                                proj.priority === 'Critical' ? 'bg-rose-600' :
+                                proj.priority === 'High' ? 'bg-amber-500' :
+                                'bg-indigo-600'
+                              }`}
+                              title={`Assigned to: ${proj.teamMembers.join(', ')}`}
+                            >
+                              {getInitials(proj)}
+                            </div>
+                          </div>
+
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Column Footer: + Add card action exactly like the screenshot */}
+                  <div className="mt-3 pt-1 flex-shrink-0">
+                    {activeQuickAddCol === col ? (
+                      <div className="space-y-2 animate-fadeIn">
+                        <input 
+                          type="text" 
+                          placeholder="Define item title..."
+                          value={quickCardName}
+                          onChange={e => setQuickCardName(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleQuickAddCard(col)}
+                          autoFocus
+                          className={`w-full text-xs p-2.5 rounded-lg outline-none ${
+                            isLight ? 'bg-white border border-gray-300 text-gray-900' : 'bg-slate-950 border border-slate-800 text-white'
+                          }`}
+                        />
+                        <div className="flex gap-1.5">
+                          <button 
+                            onClick={() => handleQuickAddCard(col)}
+                            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-750 text-white text-[10px] font-semibold rounded-lg cursor-pointer"
+                          >
+                            Add Card
+                          </button>
+                          <button 
+                            onClick={() => { setActiveQuickAddCol(null); setQuickCardName(''); }}
+                            className={`px-3 py-1 text-[11px] rounded-lg ${isLight ? 'text-gray-600 hover:bg-gray-200' : 'text-slate-400 hover:bg-slate-850'}`}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <button
+                          onClick={() => setActiveQuickAddCol(col)}
+                          className={`text-xs flex items-center gap-1.5 font-medium transition-colors cursor-pointer text-slate-400 hover:text-slate-200 py-1.5`}
+                        >
+                          <Plus className="w-4 h-4 text-slate-400" />
+                          <span>Add a card</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveQuickAddCol(col)}
+                          className="text-slate-500 hover:text-slate-300 transition-colors p-1 rounded"
+                          title="Quick clipboard item"
+                        >
+                          <Clipboard className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -791,8 +878,9 @@ export default function ProjectsKanban({
                 {currentUserRole === 'Super Admin' && (
                   <button
                     onClick={() => {
-                      onDeleteProject(selectedProject.id);
-                      setSelectedProject(projects.find(p => p.id !== selectedProject.id) || null);
+                      if (selectedProject) {
+                        setProjectToDelete({ id: selectedProject.id, name: selectedProject.name });
+                      }
                     }}
                     className="px-3 py-1.5 text-xs text-rose-400 bg-rose-950/20 border border-rose-500/20 rounded-lg hover:bg-rose-900/40 cursor-pointer"
                   >
@@ -1278,6 +1366,24 @@ export default function ProjectsKanban({
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!projectToDelete}
+        onClose={() => setProjectToDelete(null)}
+        onConfirm={() => {
+          if (projectToDelete) {
+            onDeleteProject(projectToDelete.id);
+            if (selectedProject?.id === projectToDelete.id) {
+              const remaining = projects.filter(p => p.id !== projectToDelete.id);
+              setSelectedProject(remaining[0] || null);
+            }
+          }
+        }}
+        title="Archive Project"
+        message="Are you sure you want to archive this project? It will be moved to the Archive Center."
+        itemName={projectToDelete?.name}
+      />
 
     </div>
   );

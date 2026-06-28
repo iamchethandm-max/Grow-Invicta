@@ -7,25 +7,53 @@ import React, { useState } from 'react';
 import { 
   Plus, Edit, Trash2, Search, Filter, Mail, Phone, MapPin, 
   Globe, Info, FileText, PlusCircle, CheckCircle, Calendar, 
-  ArrowRight, FileSpreadsheet, UploadCloud, X
+  ArrowRight, FileSpreadsheet, UploadCloud, X, FolderOpen
 } from 'lucide-react';
-import { Client } from '../types';
+import { Client, Project } from '../types';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
+import { formatIndianDate } from '../utils/dateUtils';
+
 
 interface ClientsCRMProps {
   clients: Client[];
+  projects: Project[];
   onAddClient: (newClient: Client) => void;
   onEditClient: (updatedClient: Client) => void;
   onDeleteClient: (id: string) => void;
+  onAddProject: (newProj: Project) => void;
+  onEditProject: (updatedProj: Project) => void;
+  onDeleteProject: (id: string) => void;
 }
 
-export default function ClientsCRM({ clients, onAddClient, onEditClient, onDeleteClient }: ClientsCRMProps) {
+export default function ClientsCRM({ 
+  clients, 
+  projects, 
+  onAddClient, 
+  onEditClient, 
+  onDeleteClient,
+  onAddProject,
+  onEditProject,
+  onDeleteProject
+}: ClientsCRMProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
+
+  // Quick Add Project States
+  const [isAddProjOpen, setIsAddProjOpen] = useState(false);
+  const [projFormName, setProjFormName] = useState('');
+  const [projFormType, setProjFormType] = useState<Project['type']>('Website Development');
+  const [projFormBudget, setProjFormBudget] = useState<number | ''>('');
+  const [projFormStart, setProjFormStart] = useState(new Date().toISOString().split('T')[0]);
+  const [projFormEnd, setProjFormEnd] = useState('');
+  const [projFormPriority, setProjFormPriority] = useState<Project['priority']>('Medium');
+  const [projFormStatus, setProjFormStatus] = useState<Project['status']>('In Progress');
+  const [projFormTeam, setProjFormTeam] = useState('');
   const [selectedClient, setSelectedClient] = useState<Client | null>(clients[0] || null);
   
   // Modals / Form toggles
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   
   // Form States
   const [formName, setFormName] = useState('');
@@ -62,7 +90,7 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
     const matchesSearch = 
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.email.toLowerCase().includes(searchQuery.toLowerCase());
+      (c.email || '').toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesStatus = statusFilter === 'All' || c.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -104,7 +132,7 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
 
   const submitAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName || !formCompany || !formEmail) return;
+    if (!formName || !formCompany) return;
 
     const newClientObj: Client = {
       id: `c_${Date.now()}`,
@@ -220,6 +248,63 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
     setNewDocName('');
   };
 
+  const associatedProjects = selectedClient
+    ? projects.filter(p => 
+        (p.clientName || '').toLowerCase() === (selectedClient.company || '').toLowerCase() ||
+        (p.clientName || '').toLowerCase() === (selectedClient.name || '').toLowerCase()
+      )
+    : [];
+
+  const submitAddProj = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClient || !projFormName) return;
+
+    const newProjObj: Project = {
+      id: `p_${Date.now()}`,
+      name: projFormName,
+      clientName: selectedClient.company || selectedClient.name,
+      type: projFormType,
+      startDate: projFormStart,
+      endDate: projFormEnd || new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 60 days default
+      budget: projFormBudget ? Number(projFormBudget) : 0,
+      teamMembers: projFormTeam ? projFormTeam.split(',').map(t => t.trim()) : [],
+      priority: projFormPriority,
+      status: projFormStatus,
+      progress: projFormStatus === 'Completed' ? 100 : (projFormStatus === 'Not Started' ? 0 : 10),
+      milestones: [],
+      comments: []
+    };
+
+    onAddProject(newProjObj);
+    setIsAddProjOpen(false);
+    
+    // Also append to client timeline
+    const updatedClient = {
+      ...selectedClient,
+      timeline: [
+        {
+          id: `t_${Date.now()}`,
+          date: new Date().toISOString().split('T')[0],
+          type: 'project' as const,
+          description: `Registered new project link: ${projFormName} (${projFormType})`
+        },
+        ...selectedClient.timeline
+      ]
+    };
+    onEditClient(updatedClient);
+    setSelectedClient(updatedClient);
+
+    // Reset fields
+    setProjFormName('');
+    setProjFormType('Website Development');
+    setProjFormBudget('');
+    setProjFormStart(new Date().toISOString().split('T')[0]);
+    setProjFormEnd('');
+    setProjFormPriority('Medium');
+    setProjFormStatus('In Progress');
+    setProjFormTeam('');
+  };
+
   return (
     <div id="client-management-module" className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
       
@@ -331,10 +416,7 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
                   </button>
                   <button 
                     onClick={() => {
-                      if (confirm(`Are you sure you want to archive CRM file for ${selectedClient.company}?`)) {
-                        onDeleteClient(selectedClient.id);
-                        setSelectedClient(clients[0] || null);
-                      }
+                      setIsDeleteConfirmOpen(true);
                     }}
                     className="p-1.5 text-rose-400 bg-rose-950/20 border border-rose-500/20 rounded-lg hover:bg-rose-900/30 cursor-pointer"
                   >
@@ -373,7 +455,9 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[9px] uppercase tracking-wider font-mono">Work Started From</span>
-                  <span className="text-indigo-300 font-mono font-medium">{selectedClient.metrics?.workStartDate || '--'}</span>
+                  <span className="text-indigo-300 font-mono font-medium">
+                    {selectedClient.metrics?.workStartDate ? formatIndianDate(selectedClient.metrics.workStartDate) : '--'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[9px] uppercase tracking-wider font-mono">Agreement Type</span>
@@ -398,6 +482,146 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
                   <p className="italic text-slate-400">{selectedClient.notes || 'No description listed for client dossier.'}</p>
                 </div>
               </div>
+            </div>
+
+            {/* Associated Projects Section */}
+            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="w-4.5 h-4.5 text-indigo-400" />
+                  <h3 className="text-xs font-semibold text-white uppercase tracking-wider font-mono">
+                    Associated Projects ({associatedProjects.length})
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setIsAddProjOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-750 text-white rounded-lg text-xs font-medium cursor-pointer transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Quick Add Project</span>
+                </button>
+              </div>
+
+              {associatedProjects.length > 0 ? (
+                <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1">
+                  {associatedProjects.map(proj => {
+                    const priorityColor = 
+                      proj.priority === 'Critical' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                      proj.priority === 'High' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                      proj.priority === 'Medium' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                      'bg-slate-500/10 text-slate-400 border border-slate-500/20';
+
+                    const statusColor = 
+                      proj.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400' :
+                      proj.status === 'In Progress' ? 'bg-indigo-500/10 text-indigo-400' :
+                      proj.status === 'On Hold' ? 'bg-amber-500/10 text-amber-400' :
+                      'bg-slate-500/10 text-slate-400';
+
+                    return (
+                      <div key={proj.id} className="p-3 bg-slate-950 rounded-xl border border-slate-850/80 space-y-3 text-xs">
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <h4 className="font-bold text-white tracking-tight">{proj.name}</h4>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{proj.type}</p>
+                          </div>
+                          <div className="flex gap-1.5 shrink-0">
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold ${priorityColor}`}>
+                              {proj.priority}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold ${statusColor}`}>
+                              {proj.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[10px] font-mono">
+                            <span className="text-slate-500">PROJECT COMPLETION</span>
+                            <span className="text-slate-300 font-semibold">{proj.progress}%</span>
+                          </div>
+                          <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                              className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500" 
+                              style={{ width: `${proj.progress}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Project Details Grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2 border-t border-slate-900 text-[10px] text-slate-400 font-mono">
+                          <div>
+                            <span className="text-slate-500 block uppercase text-[8px]">Budget</span>
+                            <span className="text-emerald-400 font-semibold">₹{proj.budget.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block uppercase text-[8px]">Start Date</span>
+                            <span className="text-slate-300">{proj.startDate ? formatIndianDate(proj.startDate) : '--'}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-slate-500 block uppercase text-[8px]">Timeline End</span>
+                            <span className="text-slate-300">{proj.endDate ? formatIndianDate(proj.endDate) : '--'}</span>
+                          </div>
+                        </div>
+
+                        {/* Quick Update Inline Actions */}
+                        <div className="flex justify-between items-center gap-2 pt-2.5 border-t border-slate-900/60">
+                          <div className="flex items-center gap-2">
+                            <label className="text-[9px] text-slate-500 uppercase font-mono">Progress:</label>
+                            <input 
+                              type="range" 
+                              min="0" 
+                              max="100" 
+                              value={proj.progress}
+                              onChange={(e) => {
+                                const newProgress = Number(e.target.value);
+                                onEditProject({
+                                  ...proj,
+                                  progress: newProgress,
+                                  status: newProgress === 100 ? 'Completed' : (proj.status === 'Completed' ? 'In Progress' : proj.status)
+                                });
+                              }}
+                              className="w-16 accent-indigo-500 cursor-ew-resize h-1 bg-slate-850 rounded-lg appearance-none"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <label className="text-[9px] text-slate-500 uppercase font-mono">Status:</label>
+                            <select
+                              value={proj.status}
+                              onChange={(e) => {
+                                const newStatus = e.target.value as Project['status'];
+                                onEditProject({
+                                  ...proj,
+                                  status: newStatus,
+                                  progress: newStatus === 'Completed' ? 100 : (proj.progress === 100 ? 90 : proj.progress)
+                                });
+                              }}
+                              className="bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-[10px] text-slate-300 font-mono focus:outline-none"
+                            >
+                              <option value="Not Started">Not Started</option>
+                              <option value="In Progress">In Progress</option>
+                              <option value="On Hold">On Hold</option>
+                              <option value="Completed">Completed</option>
+                            </select>
+                          </div>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-slate-500 text-xs font-mono bg-slate-950/40 rounded-xl border border-dashed border-slate-850">
+                  <p>No active projects found for this client portfolio.</p>
+                  <button
+                    onClick={() => setIsAddProjOpen(true)}
+                    className="mt-2 text-xs text-indigo-400 hover:underline font-semibold cursor-pointer"
+                  >
+                    + Register a new project now
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Contract list & Activity Logs tabs */}
@@ -445,7 +669,7 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
                   {selectedClient.timeline?.map(tm => (
                     <div key={tm.id} className="text-xs border-l-2 border-indigo-500 pl-3 py-0.5 ml-1 space-y-1">
                       <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                        <span>{tm.date}</span>
+                        <span>{formatIndianDate(tm.date)}</span>
                         <span className="uppercase text-[9px] text-indigo-400 font-semibold">{tm.type}</span>
                       </div>
                       <p className="text-slate-300">{tm.description}</p>
@@ -518,10 +742,9 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Email Dossier *</label>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Email Dossier (Optional)</label>
                   <input 
                     type="email" 
-                    required 
                     value={formEmail} 
                     onChange={e => setFormEmail(e.target.value)} 
                     placeholder="jensen@nvidia.com"
@@ -699,10 +922,9 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Email</label>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Email (Optional)</label>
                   <input 
                     type="email" 
-                    required 
                     value={formEmail} 
                     onChange={e => setFormEmail(e.target.value)} 
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white" 
@@ -835,6 +1057,163 @@ export default function ClientsCRM({ clients, onAddClient, onEditClient, onDelet
           </div>
         </div>
       )}
+
+      {/* Quick Add Project Dialog Overlay */}
+      {isAddProjOpen && selectedClient && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950 rounded-t-2xl">
+              <div>
+                <h3 className="text-sm font-bold text-white">Register Client Project</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">Linking new workspace taskboard to {selectedClient.company || selectedClient.name}</p>
+              </div>
+              <button onClick={() => setIsAddProjOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={submitAddProj} className="p-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Project Name *</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={projFormName} 
+                    onChange={e => setProjFormName(e.target.value)} 
+                    placeholder="E-Commerce Upgrade"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Project Type</label>
+                  <select 
+                    value={projFormType} 
+                    onChange={e => setProjFormType(e.target.value as any)} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white"
+                  >
+                    <option value="Website Development">Website Development</option>
+                    <option value="Shopify Store">Shopify Store</option>
+                    <option value="SEO">SEO</option>
+                    <option value="Social Media Management">Social Media Management</option>
+                    <option value="Google Ads">Google Ads</option>
+                    <option value="Branding">Branding</option>
+                    <option value="Graphic Design">Graphic Design</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Budget (INR) *</label>
+                  <input 
+                    type="number" 
+                    required
+                    value={projFormBudget} 
+                    onChange={e => setProjFormBudget(e.target.value === '' ? '' : Number(e.target.value))} 
+                    placeholder="e.g. 150000"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white font-mono" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Priority</label>
+                  <select 
+                    value={projFormPriority} 
+                    onChange={e => setProjFormPriority(e.target.value as any)} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white"
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Critical">Critical</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Start Date</label>
+                  <input 
+                    type="date" 
+                    required
+                    value={projFormStart} 
+                    onChange={e => setProjFormStart(e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white font-mono" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">End Date / Deadline</label>
+                  <input 
+                    type="date" 
+                    value={projFormEnd} 
+                    onChange={e => setProjFormEnd(e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white font-mono" 
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Operational Status</label>
+                  <select 
+                    value={projFormStatus} 
+                    onChange={e => setProjFormStatus(e.target.value as any)} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white"
+                  >
+                    <option value="Not Started">Not Started</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Team Members (Comma Separated)</label>
+                  <input 
+                    type="text" 
+                    value={projFormTeam} 
+                    onChange={e => setProjFormTeam(e.target.value)} 
+                    placeholder="Siddharth Roy, Nisha Sen"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white" 
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800 flex gap-2 justify-end">
+                <button 
+                  type="button" 
+                  onClick={() => setIsAddProjOpen(false)}
+                  className="px-4 py-2 bg-slate-950 border border-slate-800 text-slate-400 rounded-lg text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-755 text-white rounded-lg text-xs font-medium cursor-pointer"
+                >
+                  Register Project
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isDeleteConfirmOpen}
+        onClose={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={() => {
+          if (selectedClient) {
+            onDeleteClient(selectedClient.id);
+            // Select the next available client or null
+            const remaining = clients.filter(c => c.id !== selectedClient.id);
+            setSelectedClient(remaining[0] || null);
+          }
+        }}
+        title="Archive Client CRM"
+        message="Are you sure you want to archive this client CRM folder? It will be moved to the Archive Center."
+        itemName={selectedClient?.company}
+      />
 
     </div>
   );

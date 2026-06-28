@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, Briefcase, CheckCircle2, AlertTriangle, IndianRupee, TrendingUp, 
   Sparkles, Megaphone, ArrowUpRight, DollarSign, Calendar, Clock
@@ -21,13 +21,56 @@ interface DashboardProps {
   onNavigate: (tab: any) => void;
   currentUsername?: string;
   companyName?: string;
+  enabledFeatures?: Record<string, boolean>;
 }
 
 export default function Dashboard({ 
   clients, leads, projects, tasks, payments, finances, onNavigate,
   currentUsername = 'Chethan D. M.',
-  companyName = 'GrowInvicta'
+  companyName = 'GrowInvicta',
+  enabledFeatures = { leads: true, timetracker: true, payments: true, websites: true, calendar: true }
 }: DashboardProps) {
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [istTime, setIstTime] = useState('');
+  const [istDate, setIstDate] = useState('');
+  const calendarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+      const dateStr = now.toLocaleDateString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+      setIstTime(timeStr);
+      setIstDate(dateStr);
+    };
+
+    updateClock();
+    const intervalId = setInterval(updateClock, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (calendarRef.current && !calendarRef.current.contains(event.target as Node)) {
+        setShowCalendar(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Console trace of dashboard rendering and passed data
   console.log('[Trace Dashboard] Rendering Dashboard component', {
     clientsLength: clients?.length,
@@ -69,16 +112,67 @@ export default function Dashboard({
   const leadsGenerated = leads.length;
   const leadsConverted = leads.filter(l => l.status === 'Won').length;
 
-  // 2. Chart Data Generation
-  // Revenue Trend - aggregate monthly invoices
-  const revenueTrendData = [
-    { name: 'Jan', revenue: 950000, expense: 410000 },
-    { name: 'Feb', revenue: 1450000, expense: 520000 },
-    { name: 'Mar', revenue: 1800000, expense: 610000 },
-    { name: 'Apr', revenue: 1210000, expense: 480000 },
-    { name: 'May', revenue: 1550000, expense: 710000 },
-    { name: 'Jun', revenue: monthlyRevenue + 850000, expense: 671500 } // adding base mock offset for realistic visual trends
+  // Helper to extract month (e.g. "01", "02") from a date string
+  const getMonthFromDate = (dateStr: string) => {
+    if (!dateStr || dateStr === '--') return null;
+    const parts = dateStr.split('-');
+    if (parts.length >= 2) {
+      return parts[1]; // "01", "02", etc.
+    }
+    return null;
+  };
+
+  const monthsList = [
+    { key: '01', name: 'Jan' },
+    { key: '02', name: 'Feb' },
+    { key: '03', name: 'Mar' },
+    { key: '04', name: 'Apr' },
+    { key: '05', name: 'May' },
+    { key: '06', name: 'Jun' }
   ];
+
+  // 2. Chart Data Generation
+  // Revenue Trend - dynamically aggregate monthly invoices and finances
+  const revenueTrendData = monthsList.map(m => {
+    // 1. Calculate revenue from payments paid in this month
+    const monthPayments = payments.filter(p => {
+      if (p.status !== 'Paid' && p.status !== 'Partial') return false;
+      return getMonthFromDate(p.paymentDate) === m.key;
+    });
+    const paymentRev = monthPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+
+    // 2. Calculate revenue from general finances Income in this month
+    const monthFinancesIncome = finances.filter(f => {
+      if (f.type !== 'Income') return false;
+      return getMonthFromDate(f.date) === m.key;
+    });
+    
+    // Deduplicate income entries in finances that are just logs of the invoice payments
+    const uniqueFinancesIncome = monthFinancesIncome.filter(f => {
+      const notes = (f.notes || '').toLowerCase();
+      const source = (f.sourceOrName || '').toLowerCase();
+      if ((notes.includes('invoice') || source.includes('invoice')) && paymentRev > 0) {
+        return false;
+      }
+      return true;
+    });
+    const financeRev = uniqueFinancesIncome.reduce((sum, f) => sum + f.amount, 0);
+
+    const totalMonthRevenue = paymentRev + financeRev;
+
+    // 3. Calculate expenses from general finances Expense in this month
+    const monthFinancesExpense = finances.filter(f => {
+      if (f.type !== 'Expense') return false;
+      return getMonthFromDate(f.date) === m.key;
+    });
+    const totalMonthExpense = monthFinancesExpense.reduce((sum, f) => sum + f.amount, 0);
+
+    return {
+      name: m.name,
+      revenue: totalMonthRevenue,
+      expense: totalMonthExpense
+    };
+  });
 
   // Lead Funnel conversion rates
   const funnelData = [
@@ -111,19 +205,107 @@ export default function Dashboard({
             <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 uppercase tracking-wide">
               agency live status
             </span>
-            <span className="text-slate-400 text-xs font-mono">UTC: 2026-06-19 07:13:52</span>
+            <span className="text-slate-400 text-xs font-mono">Run Mode: Super Admin</span>
           </div>
           <h1 className="text-2xl font-bold text-white mt-1.5 font-sans tracking-tight">
             Welcome back, {currentUsername}
           </h1>
-          <p className="text-slate-400 text-xs mt-0.5">
-            {companyName === 'GrowInvicta' ? 'GrowInvicta' : companyName}'s running rate is up <strong className="text-emerald-400 font-medium">+14.2%</strong> this fiscal quarter. Invoices are reconciling smoothly.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
-          <Clock className="w-4 h-4 text-indigo-400" />
-          <span className="text-xs font-mono text-slate-300">Run Mode: Super Admin Control</span>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5 bg-slate-950 px-3.5 py-2.5 rounded-xl border border-slate-800 text-xs font-mono text-slate-300">
+          <div className="flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="text-[10px] text-indigo-400 font-semibold tracking-wider uppercase">IST Clock</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-white font-semibold tabular-nums">{istTime}</span>
+            <span className="text-slate-600 dark:text-slate-700">&bull;</span>
+            <div className="relative" ref={calendarRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCalendar(!showCalendar);
+                  setCalendarDate(new Date());
+                }}
+                className="text-indigo-400 hover:text-indigo-300 font-semibold underline decoration-indigo-500/40 decoration-wavy underline-offset-2 cursor-pointer transition-colors"
+                title="Click to show calendar"
+              >
+                {istDate}
+              </button>
+
+              {showCalendar && (
+                <div className="absolute right-0 top-full mt-3 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl p-4 w-64 z-50 animate-fadeIn text-left">
+                  <div className="flex justify-between items-center mb-3">
+                    <button 
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
+                      }}
+                      className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-900 text-xs cursor-pointer select-none"
+                    >
+                      &lt;
+                    </button>
+                    <span className="text-xs font-semibold text-white font-sans">
+                      {calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                    </span>
+                    <button 
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
+                      }}
+                      className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-900 text-xs cursor-pointer select-none"
+                    >
+                      &gt;
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-slate-500 mb-1.5 font-sans">
+                    <span>Su</span>
+                    <span>Mo</span>
+                    <span>Tu</span>
+                    <span>We</span>
+                    <span>Th</span>
+                    <span>Fr</span>
+                    <span>Sa</span>
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1 text-center font-sans text-xs">
+                    {(() => {
+                      const year = calendarDate.getFullYear();
+                      const month = calendarDate.getMonth();
+                      const firstDayIndex = new Date(year, month, 1).getDay();
+                      const totalDays = new Date(year, month + 1, 0).getDate();
+                      
+                      const cells = [];
+                      for (let i = 0; i < firstDayIndex; i++) {
+                        cells.push(<div key={`empty-${i}`} className="p-1" />);
+                      }
+                      
+                      const today = new Date();
+                      for (let d = 1; d <= totalDays; d++) {
+                        const isToday = today.getDate() === d && today.getMonth() === month && today.getFullYear() === year;
+                        cells.push(
+                          <div 
+                            key={`day-${d}`} 
+                            className={`p-1 rounded font-medium select-none text-[11px] ${
+                              isToday 
+                                ? 'bg-indigo-600 text-white font-bold shadow-sm shadow-indigo-600/30' 
+                                : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                            }`}
+                          >
+                            {d}
+                          </div>
+                        );
+                      }
+                      return cells;
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -218,105 +400,115 @@ export default function Dashboard({
         </div>
 
         {/* Total Revenue */}
-        <div 
-          onClick={() => onNavigate('payments')}
-          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-indigo-400 transition-all cursor-pointer group"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-medium text-slate-400">Total Revenue</span>
-            <span className="p-1.5 bg-slate-950 rounded-lg text-indigo-400">
-              <TrendingUp className="w-4 h-4" />
-            </span>
+        {enabledFeatures.payments && (
+          <div 
+            onClick={() => onNavigate('payments')}
+            className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-indigo-400 transition-all cursor-pointer group"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-medium text-slate-400">Total Revenue</span>
+              <span className="p-1.5 bg-slate-950 rounded-lg text-indigo-400">
+                <TrendingUp className="w-4 h-4" />
+              </span>
+            </div>
+            <div className="text-xl font-bold text-white tracking-tight flex items-center gap-0.5">
+              <span className="text-sm font-normal text-slate-400">₹</span>
+              {totalRevenue.toLocaleString('en-IN')}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              Total ledger receipts
+            </div>
           </div>
-          <div className="text-xl font-bold text-white tracking-tight flex items-center gap-0.5">
-            <span className="text-sm font-normal text-slate-400">₹</span>
-            {totalRevenue.toLocaleString('en-IN')}
-          </div>
-          <div className="text-[10px] text-slate-400 mt-1">
-            Total ledger receipts
-          </div>
-        </div>
+        )}
 
         {/* Monthly Revenue */}
-        <div 
-          onClick={() => onNavigate('payments')}
-          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-indigo-400 transition-all cursor-pointer group"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-medium text-slate-400">Monthly Revenue</span>
-            <span className="p-1.5 bg-slate-950 rounded-lg text-emerald-400">
-              <IndianRupee className="w-3.5 h-3.5" />
-            </span>
+        {enabledFeatures.payments && (
+          <div 
+            onClick={() => onNavigate('payments')}
+            className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-indigo-400 transition-all cursor-pointer group"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-medium text-slate-400">Monthly Revenue</span>
+              <span className="p-1.5 bg-slate-950 rounded-lg text-emerald-400">
+                <IndianRupee className="w-3.5 h-3.5" />
+              </span>
+            </div>
+            <div className="text-xl font-bold text-white tracking-tight flex items-center gap-0.5">
+              <span className="text-sm font-normal text-slate-400">₹</span>
+              {monthlyRevenue.toLocaleString('en-IN')}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              Received in June 2026
+            </div>
           </div>
-          <div className="text-xl font-bold text-white tracking-tight flex items-center gap-0.5">
-            <span className="text-sm font-normal text-slate-400">₹</span>
-            {monthlyRevenue.toLocaleString('en-IN')}
-          </div>
-          <div className="text-[10px] text-slate-400 mt-1">
-            Received in June 2026
-          </div>
-        </div>
+        )}
 
         {/* Pending Payments */}
-        <div 
-          onClick={() => onNavigate('payments')}
-          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-amber-500 transition-all cursor-pointer group"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-medium text-slate-400">Outstanding Invoices</span>
-            <span className="p-1.5 bg-slate-950 rounded-lg text-amber-500">
-              <TrendingUp className="w-4 h-4" />
-            </span>
+        {enabledFeatures.payments && (
+          <div 
+            onClick={() => onNavigate('payments')}
+            className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-amber-500 transition-all cursor-pointer group"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-medium text-slate-400">Outstanding Invoices</span>
+              <span className="p-1.5 bg-slate-950 rounded-lg text-amber-500">
+                <TrendingUp className="w-4 h-4" />
+              </span>
+            </div>
+            <div className="text-xl font-bold text-amber-400 tracking-tight flex items-center gap-0.5">
+              <span className="text-sm font-normal text-amber-500">₹</span>
+              {pendingPayments.toLocaleString('en-IN')}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              Unbilled & Overdue credit
+            </div>
           </div>
-          <div className="text-xl font-bold text-amber-400 tracking-tight flex items-center gap-0.5">
-            <span className="text-sm font-normal text-amber-500">₹</span>
-            {pendingPayments.toLocaleString('en-IN')}
-          </div>
-          <div className="text-[10px] text-slate-400 mt-1">
-            Unbilled & Overdue credit
-          </div>
-        </div>
+        )}
 
         {/* Leads Generated */}
-        <div 
-          onClick={() => onNavigate('leads')}
-          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-cyan-500 transition-all cursor-pointer group"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-medium text-slate-400">Leads Generated</span>
-            <span className="p-1.5 bg-slate-950 rounded-lg text-cyan-400">
-              <Megaphone className="w-4 h-4" />
-            </span>
+        {enabledFeatures.leads && (
+          <div 
+            onClick={() => onNavigate('leads')}
+            className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-cyan-500 transition-all cursor-pointer group"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-medium text-slate-400">Leads Generated</span>
+              <span className="p-1.5 bg-slate-950 rounded-lg text-cyan-400">
+                <Megaphone className="w-4 h-4" />
+              </span>
+            </div>
+            <div className="text-2xl font-semibold text-white tracking-tight">{leadsGenerated}</div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              Across active channels
+            </div>
           </div>
-          <div className="text-2xl font-semibold text-white tracking-tight">{leadsGenerated}</div>
-          <div className="text-[10px] text-slate-400 mt-1">
-            Across active channels
-          </div>
-        </div>
+        )}
 
         {/* Leads Converted */}
-        <div 
-          onClick={() => onNavigate('leads')}
-          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-emerald-400 transition-all cursor-pointer group"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-medium text-slate-400">Leads Won</span>
-            <span className="p-1.5 bg-slate-950 rounded-lg text-emerald-400">
-              <ArrowUpRight className="w-4 h-4" />
-            </span>
+        {enabledFeatures.leads && (
+          <div 
+            onClick={() => onNavigate('leads')}
+            className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-emerald-400 transition-all cursor-pointer group"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-medium text-slate-400">Leads Won</span>
+              <span className="p-1.5 bg-slate-950 rounded-lg text-emerald-400">
+                <ArrowUpRight className="w-4 h-4" />
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-emerald-400 tracking-tight">{leadsConverted}</div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              Conversion Rate: {Math.round((leadsConverted / (leadsGenerated || 1)) * 100)}%
+            </div>
           </div>
-          <div className="text-2xl font-bold text-emerald-400 tracking-tight">{leadsConverted}</div>
-          <div className="text-[10px] text-slate-400 mt-1">
-            Conversion Rate: {Math.round((leadsConverted / (leadsGenerated || 1)) * 100)}%
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Main Charts Modules (Dual Column layout) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Column 1: Financial Performance Trends */}
-        <div className="lg:col-span-8 bg-slate-900 p-6 rounded-2xl border border-slate-800">
+        <div className={`${enabledFeatures.leads ? 'lg:col-span-8' : 'lg:col-span-12'} bg-slate-900 p-6 rounded-2xl border border-slate-800`}>
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="text-sm font-semibold text-white font-sans">
@@ -367,52 +559,54 @@ export default function Dashboard({
         </div>
 
         {/* Column 2: Lead Funnel */}
-        <div className="lg:col-span-4 bg-slate-900 p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-white mb-1 font-sans">
-              Lead Conversion Funnel
-            </h3>
-            <p className="text-slate-400 text-[11px] mb-6">
-              Track CRM response metrics for prospective client projects.
-            </p>
-          </div>
+        {enabledFeatures.leads && (
+          <div className="lg:col-span-4 bg-slate-900 p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-white mb-1 font-sans">
+                Lead Conversion Funnel
+              </h3>
+              <p className="text-slate-400 text-[11px] mb-6">
+                Track CRM response metrics for prospective client projects.
+              </p>
+            </div>
 
-          {/* Graphical Funnel blocks */}
-          <div className="space-y-3.5 my-4 flex-1 flex flex-col justify-center">
-            {funnelData.map((item, index) => {
-              const maxCount = Math.max(...funnelData.map(d => d.count)) || 1;
-              const widthPct = `${(item.count / maxCount) * 100}%`;
-              return (
-                <div key={item.stage} className="space-y-1">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-300 font-medium">{item.stage}</span>
-                    <span className="font-mono text-slate-400 text-[11px]">{item.count} Leads</span>
-                  </div>
-                  <div className="w-full bg-slate-950 h-6.5 rounded-lg overflow-hidden border border-slate-850 flex items-center px-1">
-                    <div 
-                      className="h-4.5 rounded-md flex items-center justify-end pr-2 transition-all duration-300" 
-                      style={{ 
-                        width: widthPct, 
-                        background: `linear-gradient(90deg, ${item.color}33, ${item.color})` 
-                      }}
-                    >
-                      <span className="text-[10px] font-bold text-white font-mono">
-                        {Math.round((item.count / maxCount) * 100)}%
-                      </span>
+            {/* Graphical Funnel blocks */}
+            <div className="space-y-3.5 my-4 flex-1 flex flex-col justify-center">
+              {funnelData.map((item, index) => {
+                const maxCount = Math.max(...funnelData.map(d => d.count)) || 1;
+                const widthPct = `${(item.count / maxCount) * 100}%`;
+                return (
+                  <div key={item.stage} className="space-y-1">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-300 font-medium">{item.stage}</span>
+                      <span className="font-mono text-slate-400 text-[11px]">{item.count} Leads</span>
+                    </div>
+                    <div className="w-full bg-slate-950 h-6.5 rounded-lg overflow-hidden border border-slate-850 flex items-center px-1">
+                      <div 
+                        className="h-4.5 rounded-md flex items-center justify-end pr-2 transition-all duration-300" 
+                        style={{ 
+                          width: widthPct, 
+                          background: `linear-gradient(90deg, ${item.color}33, ${item.color})` 
+                        }}
+                      >
+                        <span className="text-[10px] font-bold text-white font-mono">
+                          {Math.round((item.count / maxCount) * 100)}%
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
 
-          <div className="pt-4 border-t border-slate-800 text-xs text-slate-400 flex items-center justify-between">
-            <span>Overall Closed Ratio</span>
-            <span className="font-mono text-emerald-400 font-semibold">
-              {Math.round((leadsConverted / (leads.length || 1)) * 100)}% Conversion
-            </span>
+            <div className="pt-4 border-t border-slate-800 text-xs text-slate-400 flex items-center justify-between">
+              <span>Overall Closed Ratio</span>
+              <span className="font-mono text-emerald-400 font-semibold">
+                {Math.round((leadsConverted / (leads.length || 1)) * 100)}% Conversion
+              </span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

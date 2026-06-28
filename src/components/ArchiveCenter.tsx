@@ -4,6 +4,8 @@ import {
   Users, Sparkles, Briefcase, CheckSquare, IndianRupee, Globe, FileText
 } from 'lucide-react';
 import { ArchivedItem } from '../types';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
+
 
 interface ArchiveCenterProps {
   archivedItems: ArchivedItem[];
@@ -20,6 +22,7 @@ export default function ArchiveCenter({
 }: ArchiveCenterProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [itemToDelete, setItemToDelete] = useState<ArchivedItem | null>(null);
 
   const filteredItems = archivedItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -199,7 +202,7 @@ export default function ArchiveCenter({
                           <RotateCcw className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => onDeletePermanent(item.id)}
+                          onClick={() => setItemToDelete(item)}
                           className={`p-1.5 rounded-lg hover:scale-105 active:scale-95 transition-all text-rose-400 hover:text-rose-500 cursor-pointer ${
                             theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-slate-950'
                           }`}
@@ -216,6 +219,20 @@ export default function ArchiveCenter({
           </div>
         </div>
       )}
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!itemToDelete}
+        onClose={() => setItemToDelete(null)}
+        onConfirm={() => {
+          if (itemToDelete) {
+            onDeletePermanent(itemToDelete.id);
+          }
+        }}
+        title="PERMANENTLY DELETE RECORD"
+        message="Are you absolutely sure you want to PERMANENTLY delete this record? This action is completely irreversible and the data will be lost forever."
+        itemName={itemToDelete ? `${itemToDelete.type.toUpperCase()}: ${itemToDelete.name}` : ''}
+      />
+
     </div>
   );
 }

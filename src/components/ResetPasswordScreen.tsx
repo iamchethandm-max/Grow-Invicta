@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Layers, Lock, Key, ArrowRight, Check, AlertCircle } from 'lucide-react';
+import { Layers, Lock, Key, ArrowRight, Check, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 interface ResetPasswordScreenProps {
   theme: 'dark' | 'light';
@@ -14,6 +14,8 @@ export default function ResetPasswordScreen({ theme, onBackToLogin }: ResetPassw
   // Form states
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // Status states
   const [errorMsg, setErrorMsg] = useState('');
@@ -149,17 +151,25 @@ export default function ResetPasswordScreen({ theme, onBackToLogin }: ResetPassw
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     placeholder="At least 8 characters"
-                    className={`w-full pl-11 pr-4 py-3 text-sm rounded-xl border outline-none transition-all ${
+                    className={`w-full pl-11 pr-11 py-3 text-sm rounded-xl border outline-none transition-all ${
                       isLight 
                         ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500' 
                         : 'bg-slate-950 border-slate-800 text-slate-150 focus:border-indigo-500'
                     }`}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-350 dark:hover:text-slate-200 focus:outline-none cursor-pointer"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                  </button>
                 </div>
               </div>
 
@@ -170,17 +180,25 @@ export default function ResetPasswordScreen({ theme, onBackToLogin }: ResetPassw
                 <div className="relative">
                   <Key className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
                   <input
-                    type="password"
+                    type={showConfirmPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
                     placeholder="Repeat your password"
-                    className={`w-full pl-11 pr-4 py-3 text-sm rounded-xl border outline-none transition-all ${
+                    className={`w-full pl-11 pr-11 py-3 text-sm rounded-xl border outline-none transition-all ${
                       isLight 
                         ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500' 
                         : 'bg-slate-950 border-slate-800 text-slate-150 focus:border-indigo-500'
                     }`}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-350 dark:hover:text-slate-200 focus:outline-none cursor-pointer"
+                    title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                  </button>
                 </div>
               </div>
 

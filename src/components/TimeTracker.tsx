@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Square, Plus, Trash2, Calendar, Clipboard, Clock, Award, BarChart3, Search, Filter, X, Check } from 'lucide-react';
-import { Project, Task, TimeLog, Client } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
+import { Play, Square, Plus, Trash2, Calendar, Clock, BarChart3, Search, X } from 'lucide-react';
+import { Project, TimeLog, Client } from '../types';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
+import { formatIndianDate } from '../utils/dateUtils';
+
+import { Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 
 interface TimeTrackerProps {
   projects: Project[];
-  tasks: Task[];
+  tasks: any[];
   timeLogs: TimeLog[];
   clients: Client[];
   onAddLog: (newLog: TimeLog) => void;
@@ -13,19 +16,16 @@ interface TimeTrackerProps {
   theme: 'dark' | 'light';
 }
 
-export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddLog, onDeleteLog, theme }: TimeTrackerProps) {
+export default function TimeTracker({ projects, timeLogs, clients, onAddLog, onDeleteLog, theme }: TimeTrackerProps) {
   // Timer states
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [timerClientName, setTimerClientName] = useState('');
-  const [timerProject, setTimerProject] = useState('');
-  const [timerTaskTitle, setTimerTaskTitle] = useState('');
   const [timerDescription, setTimerDescription] = useState('');
   
   // Manual offset entry state
   const [isManualOpen, setIsManualOpen] = useState(false);
-  const [manualProject, setManualProject] = useState(projects[0]?.id || '');
-  const [manualTask, setManualTask] = useState('');
+  const [manualClientName, setManualClientName] = useState('');
   const [manualDesc, setManualDesc] = useState('');
   const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
   const [manualHours, setManualHours] = useState('1');
@@ -33,11 +33,15 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
 
   // Search/Filters states
   const [searchQuery, setSearchQuery] = useState('');
-  const [projectFilter, setProjectFilter] = useState('all');
+  const [clientFilter, setClientFilter] = useState('all');
+  const [logToDelete, setLogToDelete] = useState<TimeLog | null>(null);
   const [currentMonth, setCurrentMonth] = useState<string>(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Graph month selection: 'current' or 'previous'
+  const [graphMonthMode, setGraphMonthMode] = useState<'current' | 'previous'>('current');
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<string>('');
@@ -57,18 +61,31 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
     };
   }, [isTimerRunning]);
 
+  // Helper to determine client name for any log (supports both new logs and old/mock project logs)
+  const getClientNameForLog = (log: TimeLog): string => {
+    // 1. If the log's projectId directly matches a client ID
+    const directClientById = clients.find(c => c.id === log.projectId);
+    if (directClientById) {
+      return directClientById.company;
+    }
+    // 2. If the log's projectName matches a client company name
+    const directClientByName = clients.find(c => c.company === log.projectName);
+    if (directClientByName) {
+      return directClientByName.company;
+    }
+    // 3. Otherwise, look up via project
+    const project = projects.find(p => p.id === log.projectId);
+    if (project) {
+      return project.clientName;
+    }
+    // 4. Fallback to projectName or "General Operations"
+    return log.projectName || 'General Operations';
+  };
+
   // Handle timer toggling
   const handleStartTimer = () => {
     if (!timerClientName) {
       alert("Please select an active client before initiating the timer.");
-      return;
-    }
-    if (!timerProject) {
-      alert("Please associate a project with this tracker entry.");
-      return;
-    }
-    if (!timerTaskTitle.trim()) {
-      alert("Please enter a task label before starting work.");
       return;
     }
     setIsTimerRunning(true);
@@ -81,14 +98,15 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
     setIsTimerRunning(false);
     
     const minutesTracked = Math.max(1, Math.round(timerSeconds / 60));
-    const activeProj = projects.find(p => p.id === timerProject) || projects[0];
+    const matchedClient = clients.find(c => c.company === timerClientName);
+    const clientId = matchedClient?.id || 'other';
     
     const logObj: TimeLog = {
       id: `timelog_${Date.now()}`,
-      projectId: timerProject || activeProj?.id || 'other',
-      projectName: activeProj?.name || 'General Operations',
-      taskTitle: timerTaskTitle,
-      description: timerDescription || 'Ongoing project activity',
+      projectId: clientId,
+      projectName: timerClientName,
+      taskTitle: 'Time Log',
+      description: timerDescription || 'Worked on client operations',
       startTime: startTimeRef.current,
       endTime: new Date().toISOString(),
       durationMinutes: minutesTracked,
@@ -100,16 +118,23 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
     // Reset states
     setTimerSeconds(0);
     setTimerDescription('');
-    setTimerTaskTitle('');
   };
 
   // Submit manual log
   const handleAddManualLog = (e: React.FormEvent) => {
     e.preventDefault();
-    const activeProj = projects.find(p => p.id === manualProject) || projects[0];
+    if (!manualClientName) {
+      alert("Please select a client.");
+      return;
+    }
+    const matchedClient = clients.find(c => c.company === manualClientName);
+    const clientId = matchedClient?.id || 'other';
     const totalMinutes = (Number(manualHours) * 60) + Number(manualMinutes);
 
-    if (totalMinutes <= 0) return;
+    if (totalMinutes <= 0) {
+      alert("Please specify a duration greater than zero.");
+      return;
+    }
 
     const start = new Date(manualDate);
     start.setHours(9, 0, 0); // simulated default start time
@@ -117,9 +142,9 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
 
     const logObj: TimeLog = {
       id: `timelog_${Date.now()}`,
-      projectId: manualProject || activeProj?.id || 'other',
-      projectName: activeProj?.name || 'General Operations',
-      taskTitle: manualTask || 'Assigned Milestones',
+      projectId: clientId,
+      projectName: manualClientName,
+      taskTitle: 'Time Log',
       description: manualDesc || 'Logged operational hours worked',
       startTime: start.toISOString(),
       endTime: end.toISOString(),
@@ -130,7 +155,7 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
     onAddLog(logObj);
     
     // Reset manual form
-    setManualTask('');
+    setManualClientName('');
     setManualDesc('');
     setIsManualOpen(false);
   };
@@ -152,47 +177,80 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
     return `${mins} min`;
   };
 
-  // Filter logs for displaying list & charts
+  // Filter logs for displaying list
   const filteredLogs = timeLogs.filter(log => {
     const logYearMonth = log.date.substring(0, 7); // "YYYY-MM"
     const matchesMonth = logYearMonth === currentMonth;
-    const matchesProject = projectFilter === 'all' || log.projectId === projectFilter;
+    
+    const clientName = getClientNameForLog(log);
+    const matchesClient = clientFilter === 'all' || clientName === clientFilter;
+    
     const matchesKeyword = searchQuery === '' || 
-      log.projectName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.taskTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.description.toLowerCase().includes(searchQuery.toLowerCase());
     
-    return matchesMonth && matchesProject && matchesKeyword;
+    return matchesMonth && matchesClient && matchesKeyword;
   });
 
-  // Calculate Monthly Breakdown for stats & charts
-  const projectBreakdownMap: Record<string, { duration: number; name: string; color: string }> = {};
-  const currentMonthLogs = timeLogs.filter(log => log.date.substring(0, 7) === currentMonth);
+  // Dynamically compute Current Month and Previous Month strings
+  const getMonthStrings = () => {
+    const now = new Date('2026-06-25'); // Anchored to base time for stability
+    const currentYear = now.getFullYear();
+    const currentMonthNum = now.getMonth() + 1;
+    
+    const currentMonthStr = `${currentYear}-${String(currentMonthNum).padStart(2, '0')}`;
+    
+    let prevMonthNum = currentMonthNum - 1;
+    let prevYear = currentYear;
+    if (prevMonthNum === 0) {
+      prevMonthNum = 12;
+      prevYear = currentYear - 1;
+    }
+    const previousMonthStr = `${prevYear}-${String(prevMonthNum).padStart(2, '0')}`;
+    
+    return { currentMonthStr, previousMonthStr };
+  };
 
+  const { currentMonthStr, previousMonthStr } = getMonthStrings();
+
+  // Selected graph month based on toggle option
+  const targetGraphMonth = graphMonthMode === 'current' ? currentMonthStr : previousMonthStr;
+  const graphMonthLogs = timeLogs.filter(log => log.date.substring(0, 7) === targetGraphMonth);
+
+  // Group hours by client for the graph
+  const clientBreakdownMap: Record<string, { duration: number; name: string; color: string }> = {};
   const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#8b5cf6', '#ef4444'];
 
-  currentMonthLogs.forEach((log, idx) => {
-    if (!projectBreakdownMap[log.projectId]) {
-      projectBreakdownMap[log.projectId] = {
+  graphMonthLogs.forEach((log) => {
+    const clientName = getClientNameForLog(log);
+    if (!clientBreakdownMap[clientName]) {
+      clientBreakdownMap[clientName] = {
         duration: 0,
-        name: log.projectName,
-        color: colors[Object.keys(projectBreakdownMap).length % colors.length]
+        name: clientName,
+        color: colors[Object.keys(clientBreakdownMap).length % colors.length]
       };
     }
-    projectBreakdownMap[log.projectId].duration += log.durationMinutes;
+    clientBreakdownMap[clientName].duration += log.durationMinutes;
   });
 
-  const chartData = Object.keys(projectBreakdownMap).map(key => ({
+  const chartData = Object.keys(clientBreakdownMap).map(key => ({
     id: key,
-    name: projectBreakdownMap[key].name,
-    Hours: parseFloat((projectBreakdownMap[key].duration / 60).toFixed(1)),
-    color: projectBreakdownMap[key].color
+    name: clientBreakdownMap[key].name,
+    Hours: parseFloat((clientBreakdownMap[key].duration / 60).toFixed(1)),
+    color: clientBreakdownMap[key].color
   }));
 
+  // General statistics (e.g. tracking progress is still based on selected main logs list month)
+  const currentMonthLogs = timeLogs.filter(log => log.date.substring(0, 7) === currentMonth);
   const totalMinutesThisMonth = currentMonthLogs.reduce((acc, log) => acc + log.durationMinutes, 0);
   const totalHoursThisMonth = parseFloat((totalMinutesThisMonth / 60).toFixed(1));
   const dailyTrackerTarget = 160; // 160 hours target monthly
   const percentOfTarget = Math.min(100, Math.round((totalHoursThisMonth / dailyTrackerTarget) * 100));
+
+  // Graph statistics
+  const totalMinutesInGraphMonth = graphMonthLogs.reduce((acc, log) => acc + log.durationMinutes, 0);
+  const totalHoursInGraphMonth = parseFloat((totalMinutesInGraphMonth / 60).toFixed(1));
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -206,9 +264,9 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1">
             <span className="text-[10px] text-indigo-500 font-mono uppercase tracking-widest font-bold">Timesheet Workspace</span>
-            <h2 className="text-xl font-bold tracking-tight font-display">GrowInvicta Time Tracking Engine</h2>
+            <h2 className="text-xl font-bold tracking-tight font-display">Time Tracker</h2>
             <p className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>
-              Seamlessly record active client hours, manage work tasks, and generate monthly developer audits.
+              Seamlessly record active client hours and generate monthly client billing audits.
             </p>
           </div>
 
@@ -235,31 +293,22 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
         </div>
       </div>
 
-      {/* 2. Interactive Click-to-Start Live Clockify Timer */}
+      {/* 2. Interactive Click-to-Start Live Timer */}
       <div className={`p-6 rounded-2xl border transition-all ${
         theme === 'light' 
           ? 'bg-white border-gray-200 text-gray-900 shadow-sm' 
           : 'bg-slate-900 border-slate-800 text-white'
       }`}>
         <div className="flex flex-col lg:flex-row items-center gap-4">
-          <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-4 gap-3.5">
+          <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 1. Client selector (active only) */}
             <div>
-              <label className={`text-[9px] uppercase font-mono mb-1.5 block font-bold ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>
-                1. Select Active Client <span className="text-indigo-500">*</span>
+              <label className={`text-[10px] uppercase font-mono mb-1.5 block font-bold ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>
+                Select the Client <span className="text-indigo-500">*</span>
               </label>
               <select 
                 value={timerClientName}
-                onChange={e => {
-                  const clientName = e.target.value;
-                  setTimerClientName(clientName);
-                  const relatedProjects = projects.filter(p => p.clientName === clientName);
-                  if (relatedProjects.length > 0) {
-                    setTimerProject(relatedProjects[0].id);
-                  } else {
-                    setTimerProject('');
-                  }
-                }}
+                onChange={e => setTimerClientName(e.target.value)}
                 disabled={isTimerRunning}
                 className={`w-full text-xs rounded-xl px-3.5 py-2.5 transition-all focus:outline-none ${
                   theme === 'light' 
@@ -274,61 +323,14 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
               </select>
             </div>
 
-            {/* 2. Project association */}
+            {/* 2. Description input */}
             <div>
-              <label className={`text-[9px] uppercase font-mono mb-1.5 block font-bold ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>
-                2. Associate Project <span className="text-indigo-500">*</span>
-              </label>
-              <select 
-                value={timerProject}
-                onChange={e => setTimerProject(e.target.value)}
-                disabled={isTimerRunning || !timerClientName}
-                className={`w-full text-xs rounded-xl px-3.5 py-2.5 transition-all focus:outline-none ${
-                  theme === 'light' 
-                    ? 'bg-gray-50 border border-gray-200 text-gray-900 focus:bg-white focus:border-indigo-500' 
-                    : 'bg-slate-950 border border-slate-800 text-white focus:border-indigo-500'
-                }`}
-              >
-                {!timerClientName ? (
-                  <option value="">-- Choose Client First --</option>
-                ) : (
-                  <>
-                    <option value="">-- Select Project --</option>
-                    {projects.filter(p => p.clientName === timerClientName).map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </>
-                )}
-              </select>
-            </div>
-
-            {/* 3. Task selector */}
-            <div>
-              <label className={`text-[9px] uppercase font-mono mb-1.5 block font-bold ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>
-                3. Active Task Label <span className="text-indigo-500">*</span>
+              <label className={`text-[10px] uppercase font-mono mb-1.5 block font-bold ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>
+                Activity Description
               </label>
               <input 
                 type="text" 
-                placeholder="E.g. Front-end CSS, QA bugs..." 
-                value={timerTaskTitle}
-                onChange={e => setTimerTaskTitle(e.target.value)}
-                disabled={isTimerRunning}
-                className={`w-full text-xs rounded-xl px-3.5 py-2.5 transition-all focus:outline-none ${
-                  theme === 'light' 
-                    ? 'bg-gray-50 border border-gray-200 text-gray-900 focus:bg-white focus:border-indigo-500' 
-                    : 'bg-slate-950 border border-slate-800 text-white focus:border-indigo-500'
-                }`}
-              />
-            </div>
-
-            {/* 4. Description input */}
-            <div>
-              <label className={`text-[9px] uppercase font-mono mb-1.5 block font-bold ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>
-                4. Description / Activity notes
-              </label>
-              <input 
-                type="text" 
-                placeholder="E.g. Database schema audit..." 
+                placeholder="E.g. Database schema audit, front-end polish..." 
                 value={timerDescription}
                 onChange={e => setTimerDescription(e.target.value)}
                 disabled={isTimerRunning}
@@ -398,75 +400,67 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Project</label>
+              <label className="text-[10px] text-slate-450 uppercase font-mono block mb-1 font-bold">Select the Client <span className="text-indigo-500">*</span></label>
               <select 
-                value={manualProject}
-                onChange={e => setManualProject(e.target.value)}
-                className={`w-full text-xs rounded-lg p-2.5 outline-none ${theme === 'light' ? 'bg-gray-100 border border-gray-200' : 'bg-slate-950 border border-slate-800'}`}
+                value={manualClientName}
+                onChange={e => setManualClientName(e.target.value)}
+                required
+                className={`w-full text-xs rounded-lg p-2.5 outline-none ${theme === 'light' ? 'bg-gray-100 border border-gray-200 text-gray-900' : 'bg-slate-950 border border-slate-800 text-white'}`}
               >
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                <option value="">-- Choose Client --</option>
+                {clients.filter(c => c.status === 'Active').map(c => (
+                  <option key={c.id} value={c.company}>{c.company} ({c.name})</option>
+                ))}
               </select>
             </div>
 
             <div>
-              <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Task Sub-Label</label>
-              <input 
-                type="text" 
-                required
-                placeholder="E.g. Code Review" 
-                value={manualTask}
-                onChange={e => setManualTask(e.target.value)}
-                className={`w-full text-xs rounded-lg p-2.5 outline-none ${theme === 'light' ? 'bg-gray-100 border border-gray-200' : 'bg-slate-950 border border-slate-800'}`}
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Log Date</label>
+              <label className="text-[10px] text-slate-455 uppercase font-mono block mb-1 font-bold">Log Date</label>
               <input 
                 type="date" 
                 required
                 value={manualDate}
                 onChange={e => setManualDate(e.target.value)}
-                className={`w-full text-xs rounded-lg p-2.5 outline-none font-mono ${theme === 'light' ? 'bg-gray-100 border border-gray-200' : 'bg-slate-950 border border-slate-800 text-white'}`}
+                className={`w-full text-xs rounded-lg p-2.5 outline-none font-mono ${theme === 'light' ? 'bg-gray-100 border border-gray-200 text-gray-900' : 'bg-slate-950 border border-slate-800 text-white'}`}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Hours</label>
+                <label className="text-[10px] text-slate-455 uppercase font-mono block mb-1 font-bold">Hours</label>
                 <input 
                   type="number" 
                   min="0" 
                   max="24"
                   value={manualHours}
                   onChange={e => setManualHours(e.target.value)}
-                  className={`w-full text-xs rounded-lg p-2.5 outline-none font-mono ${theme === 'light' ? 'bg-gray-100 border border-gray-200' : 'bg-slate-950 border border-slate-800'}`}
+                  className={`w-full text-xs rounded-lg p-2.5 outline-none font-mono ${theme === 'light' ? 'bg-gray-100 border border-gray-200 text-gray-900' : 'bg-slate-950 border border-slate-800 text-white'}`}
                 />
               </div>
               <div>
-                <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Mins</label>
+                <label className="text-[10px] text-slate-455 uppercase font-mono block mb-1 font-bold">Mins</label>
                 <input 
                   type="number" 
                   min="0" 
                   max="59"
                   value={manualMinutes}
                   onChange={e => setManualMinutes(e.target.value)}
-                  className={`w-full text-xs rounded-lg p-2.5 outline-none font-mono ${theme === 'light' ? 'bg-gray-100 border border-gray-200' : 'bg-slate-950 border border-slate-800'}`}
+                  className={`w-full text-xs rounded-lg p-2.5 outline-none font-mono ${theme === 'light' ? 'bg-gray-100 border border-gray-200 text-gray-900' : 'bg-slate-950 border border-slate-800 text-white'}`}
                 />
               </div>
             </div>
           </div>
 
           <div>
-            <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Executed Work Description</label>
+            <label className="text-[10px] text-slate-455 uppercase font-mono block mb-1 font-bold">Activity Description</label>
             <input 
               type="text" 
-              placeholder="Explicit details on targets met, tickets fixed, and deployments made..."
+              placeholder="E.g. Database schema audit, front-end polish..."
               value={manualDesc}
               onChange={e => setManualDesc(e.target.value)}
-              className={`w-full text-xs rounded-lg p-2.5 outline-none ${theme === 'light' ? 'bg-gray-100 border border-gray-200' : 'bg-slate-950 border border-slate-800'}`}
+              className={`w-full text-xs rounded-lg p-2.5 outline-none ${theme === 'light' ? 'bg-gray-100 border border-gray-200 text-gray-900' : 'bg-slate-950 border border-slate-800 text-white'}`}
             />
           </div>
 
@@ -474,7 +468,7 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
             <button 
               type="button" 
               onClick={() => setIsManualOpen(false)}
-              className="px-4 py-2 bg-transparent text-slate-450 border border-slate-800 text-xs rounded-lg font-mono hover:bg-slate-850"
+              className="px-4 py-2 bg-transparent text-slate-400 border border-slate-800 text-xs rounded-lg font-mono hover:bg-slate-800"
             >
               Cancel
             </button>
@@ -496,11 +490,45 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
           theme === 'light' ? 'bg-white border-gray-200 text-gray-900 shadow-sm' : 'bg-slate-900 border-slate-800 text-white'
         }`}>
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 mb-1">
-              <BarChart3 className="w-4 h-4 text-indigo-400" />
-              <span>Project Hours breakdown</span>
-            </h3>
-            <p className={`text-[11px] mb-4 ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>Current month tracked hours ratios per active client campaign.</p>
+            <div className="flex justify-between items-start gap-4 mb-3">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 mb-1">
+                  <BarChart3 className="w-4 h-4 text-indigo-400" />
+                  <span>Client Hours Breakdown</span>
+                </h3>
+                <p className={`text-[11px] ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>
+                  Ratios of tracked hours worked per client in the selected month.
+                </p>
+              </div>
+
+              {/* Month Selection Toggle */}
+              <div className={`flex p-0.5 rounded-lg border ${
+                theme === 'light' ? 'bg-gray-100 border-gray-200' : 'bg-slate-950 border-slate-800'
+              }`}>
+                <button
+                  type="button"
+                  onClick={() => setGraphMonthMode('current')}
+                  className={`px-2 py-0.5 text-[9px] font-mono rounded-md font-semibold transition-all cursor-pointer ${
+                    graphMonthMode === 'current'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : theme === 'light' ? 'text-gray-600 hover:text-gray-900' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Current
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGraphMonthMode('previous')}
+                  className={`px-2 py-0.5 text-[9px] font-mono rounded-md font-semibold transition-all cursor-pointer ${
+                    graphMonthMode === 'previous'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : theme === 'light' ? 'text-gray-600 hover:text-gray-900' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Previous
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="h-64 flex items-center justify-center relative">
@@ -523,27 +551,27 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
                   </Pie>
                   <Tooltip 
                     contentStyle={{ 
-                      backgroundColor: theme === 'light' ? '#ffffff' : '#020617', 
-                      borderRadius: '8px', 
-                      border: theme === 'light' ? '1px solid #e5e7eb' : '1px solid #1e293b',
-                      fontSize: '11px',
-                      color: theme === 'light' ? '#000000' : '#ffffff'
+                    backgroundColor: theme === 'light' ? '#ffffff' : '#020617', 
+                    borderRadius: '8px', 
+                    border: theme === 'light' ? '1px solid #e5e7eb' : '1px solid #1e293b',
+                    fontSize: '11px',
+                    color: theme === 'light' ? '#000000' : '#ffffff'
                     }} 
                   />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-slate-500 text-xs font-mono">No hours logged in this month matrix yet</p>
+              <p className="text-slate-500 text-xs font-mono text-center">No hours logged in this month matrix yet</p>
             )}
             {chartData.length > 0 && (
               <div className="absolute flex flex-col items-center">
-                <span className="text-2xl font-bold font-mono text-indigo-505">{totalHoursThisMonth}</span>
+                <span className="text-2xl font-bold font-mono text-indigo-500">{totalHoursInGraphMonth}</span>
                 <span className="text-[9px] uppercase font-mono text-slate-500 font-medium">Logged Hours</span>
               </div>
             )}
           </div>
 
-          {/* Color Guides Legen */}
+          {/* Color Guides Legend */}
           <div className="space-y-1.5 mt-4 border-t border-slate-850 pt-3">
             {chartData.slice(0, 4).map(item => (
               <div key={item.id} className="flex justify-between items-center text-xs">
@@ -555,7 +583,7 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
               </div>
             ))}
             {chartData.length > 4 && (
-              <p className="text-[10px] text-slate-500 italic text-center font-mono">+{chartData.length - 4} more projects active</p>
+              <p className="text-[10px] text-slate-500 italic text-center font-mono">+{chartData.length - 4} more clients active</p>
             )}
           </div>
         </div>
@@ -571,7 +599,9 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
                   <Clock className="w-4 h-4 text-indigo-400" />
                   <span>Interactive Work Log Sheets</span>
                 </h3>
-                <p className={`text-[11px] ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>Track and audit individual worked logs and project tasks details.</p>
+                <p className={`text-[11px] ${theme === 'light' ? 'text-gray-500' : 'text-slate-400'}`}>
+                  Track and audit individual worked logs and billing details.
+                </p>
               </div>
 
               {/* Filtering Controls */}
@@ -590,16 +620,16 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
                   />
                 </div>
 
-                {/* Project selector filter */}
+                {/* Client filter */}
                 <select 
-                  value={projectFilter}
-                  onChange={e => setProjectFilter(e.target.value)}
+                  value={clientFilter}
+                  onChange={e => setClientFilter(e.target.value)}
                   className={`text-[11px] rounded-lg px-2 py-1 outline-none ${
                     theme === 'light' ? 'bg-gray-100 text-gray-900 border border-gray-200' : 'bg-slate-950 text-white border border-slate-800'
                   }`}
                 >
-                  <option value="all">All Projects</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  <option value="all">All Clients</option>
+                  {clients.map(c => <option key={c.id} value={c.company}>{c.company}</option>)}
                 </select>
 
                 {/* Month filter select */}
@@ -608,7 +638,7 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
                   value={currentMonth}
                   onChange={e => setCurrentMonth(e.target.value)}
                   className={`text-[11px] rounded-lg px-2 py-1 font-mono outline-none ${
-                    theme === 'light' ? 'bg-gray-100 text-gray-900' : 'bg-slate-950 text-white border border-slate-805'
+                    theme === 'light' ? 'bg-gray-100 text-gray-900 border border-gray-200' : 'bg-slate-950 text-white border border-slate-800'
                   }`}
                 />
               </div>
@@ -626,12 +656,14 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
                   >
                     <div className="space-y-1 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold font-display">{log.projectName}</span>
-                        <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono leading-none ${
-                          theme === 'light' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-indigo-950/45 text-indigo-300 border border-indigo-500/20'
-                        }`}>
-                          {log.taskTitle}
-                        </span>
+                        <span className="text-xs font-bold font-display">{getClientNameForLog(log)}</span>
+                        {log.taskTitle && log.taskTitle !== 'Time Log' && log.taskTitle !== 'Work Activity' && (
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono leading-none ${
+                            theme === 'light' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-indigo-950/45 text-indigo-300 border border-indigo-500/20'
+                          }`}>
+                            {log.taskTitle}
+                          </span>
+                        )}
                       </div>
                       <p className={`text-[11px] leading-snug font-sans ${theme === 'light' ? 'text-gray-600' : 'text-slate-300'}`}>
                         {log.description}
@@ -640,7 +672,7 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
                       <div className="flex items-center gap-2.5 text-[9.5px] font-mono text-slate-500 pt-0.5">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3 text-slate-500" />
-                          {log.date}
+                          {formatIndianDate(log.date)}
                         </span>
                         <span>&bull;</span>
                         <span>Start: {new Date(log.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -656,9 +688,7 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
                       <button
                         type="button"
                         onClick={() => {
-                          if (confirm(`Do you want to permanently delete this timesheet log?`)) {
-                            onDeleteLog(log.id);
-                          }
+                          setLogToDelete(log);
                         }}
                         className="p-1.5 text-rose-450 hover:bg-rose-950/20 rounded-lg cursor-pointer"
                         title="Delete log"
@@ -686,6 +716,20 @@ export default function TimeTracker({ projects, tasks, timeLogs, clients, onAddL
         </div>
 
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!logToDelete}
+        onClose={() => setLogToDelete(null)}
+        onConfirm={() => {
+          if (logToDelete) {
+            onDeleteLog(logToDelete.id);
+          }
+        }}
+        title="Delete Timesheet Log"
+        message="Are you sure you want to permanently delete this timesheet log? This action cannot be undone."
+        itemName={logToDelete ? `${getClientNameForLog(logToDelete)} - ${logToDelete.description || 'No description'}` : ''}
+      />
 
     </div>
   );

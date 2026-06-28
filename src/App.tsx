@@ -9,7 +9,8 @@ import {
   Terminal, ShieldCheck, HelpCircle, LogOut, ChevronRight, Menu, 
   X, Layers, Calendar, FileSpreadsheet, Lock, Sparkles, Send, 
   UserPlus, UserCheck, AlertCircle, FileText, Globe, Clock, User, 
-  PanelLeftClose, PanelLeft, Sun, Moon, Download, Archive
+  PanelLeftClose, PanelLeft, Sun, Moon, Download, Archive, Settings, ArrowLeft, PlusCircle, Upload, BookOpen,
+  Zap, Check
 } from 'lucide-react';
 
 import { 
@@ -37,6 +38,9 @@ import WebsitesManager from './components/WebsitesManager';
 import TimeTracker from './components/TimeTracker';
 import ProfilePersonalization from './components/ProfilePersonalization';
 import ArchiveCenter from './components/ArchiveCenter';
+import HowToUse from './components/HowToUse';
+import AddNewFeature from './components/AddNewFeature';
+import DataImport from './components/DataImport';
 import { triggerExcelBackupDownload } from './utils/excelBackup';
 
 
@@ -127,9 +131,12 @@ export default function App() {
         let finalTasks = userTasks;
         let finalPayments = userPayments;
 
+        const userEmail = user.email ? user.email.toLowerCase() : '';
+        const isNewSignup = localStorage.getItem(`is_new_signup_${userEmail}`) === 'true';
+
         // Auto-seed for fresh user context if completely empty
         const seededMark = localStorage.getItem(`supabase_user_${user.id}_seeded`);
-        if (!seededMark && userClients.length === 0 && userLeads.length === 0 && userProjects.length === 0 && userTasks.length === 0 && userPayments.length === 0) {
+        if (!isNewSignup && !seededMark && userClients.length === 0 && userLeads.length === 0 && userProjects.length === 0 && userTasks.length === 0 && userPayments.length === 0) {
           finalClients = INITIAL_CLIENTS.map(c => ({ ...c, user_id: user.id }));
           finalLeads = INITIAL_LEADS.map(l => ({ ...l, user_id: user.id }));
           finalProjects = INITIAL_PROJECTS.map(p => ({ ...p, user_id: user.id }));
@@ -144,6 +151,49 @@ export default function App() {
             DbService.savePayments(user.id, finalPayments)
           ]);
           localStorage.setItem(`supabase_user_${user.id}_seeded`, 'true');
+        } else if (isNewSignup) {
+          localStorage.removeItem(`is_new_signup_${userEmail}`);
+          localStorage.setItem(`supabase_user_${user.id}_seeded`, 'true');
+          
+          const signupFeatures = {
+            leads: false,
+            timetracker: true,
+            payments: false,
+            websites: false,
+            calendar: false
+          };
+          localStorage.setItem('enabledFeatures', JSON.stringify(signupFeatures));
+          setEnabledFeatures(signupFeatures);
+          
+          if (userClients.length === 0 && userLeads.length === 0 && userProjects.length === 0 && userTasks.length === 0 && userPayments.length === 0) {
+            finalClients = INITIAL_CLIENTS.slice(0, 4).map(c => ({ ...c, user_id: user.id }));
+            finalLeads = [];
+            finalProjects = [];
+            finalTasks = INITIAL_TASKS.slice(0, 4).map(t => ({ ...t, user_id: user.id }));
+            finalPayments = [];
+
+            await Promise.all([
+              DbService.saveClients(user.id, finalClients),
+              DbService.saveTasks(user.id, finalTasks),
+              DbService.saveLeads(user.id, []),
+              DbService.saveProjects(user.id, []),
+              DbService.savePayments(user.id, [])
+            ]);
+
+            localStorage.setItem(`user_${user.id}_finances`, JSON.stringify([]));
+            localStorage.setItem(`user_${user.id}_reminders`, JSON.stringify([]));
+            localStorage.setItem(`user_${user.id}_auditLogs`, JSON.stringify([]));
+            localStorage.setItem(`user_${user.id}_websites`, JSON.stringify([]));
+            localStorage.setItem(`user_${user.id}_timeLogs`, JSON.stringify([]));
+
+            setShowHowToUsePopup(true);
+          } else {
+            finalClients = userClients;
+            finalLeads = userLeads;
+            finalProjects = userProjects;
+            finalTasks = userTasks;
+            finalPayments = userPayments;
+          }
         }
 
         setClients(finalClients);
@@ -157,11 +207,11 @@ export default function App() {
           return item ? JSON.parse(item) : def;
         };
 
-        setFinances(getLocalItem('finances', INITIAL_FINANCE_LETTERS));
-        setReminders(getLocalItem('reminders', INITIAL_REMINDERS));
-        setAuditLogs(getLocalItem('auditLogs', INITIAL_AUDIT_LOGS));
-        setWebsites(getLocalItem('websites', INITIAL_WEBSITES));
-        setTimeLogs(getLocalItem('timeLogs', INITIAL_TIME_LOGS));
+        setFinances(getLocalItem('finances', isNewSignup ? [] : INITIAL_FINANCE_LETTERS));
+        setReminders(getLocalItem('reminders', isNewSignup ? [] : INITIAL_REMINDERS));
+        setAuditLogs(getLocalItem('auditLogs', isNewSignup ? [] : INITIAL_AUDIT_LOGS));
+        setWebsites(getLocalItem('websites', isNewSignup ? [] : INITIAL_WEBSITES));
+        setTimeLogs(getLocalItem('timeLogs', isNewSignup ? [] : INITIAL_TIME_LOGS));
         setArchivedItems(getLocalItem('archivedItems', []));
 
         const compName = profile?.company_name || 'My SaaS Business';
@@ -206,8 +256,15 @@ export default function App() {
 
         setProfileSettings(storedSettings);
         setCurrentUsername(storedSettings.personalName || fName);
+
+        // Check for App Updated notification on login
+        const updateNotifiedKey = `app_updated_notified_v2_${user.id}`;
+        const hasSeenUpdate = localStorage.getItem(updateNotifiedKey) === 'true';
+        if (!hasSeenUpdate && !isNewSignup) {
+          setShowAppUpdatedPopup(true);
+        }
       } catch (err) {
-        console.error('Error on loading user data:', err);
+        console.warn('Status of loading user data (using local database fallbacks):', err);
       } finally {
         setDbLoaded(true);
       }
@@ -225,6 +282,30 @@ export default function App() {
     return window.location.pathname.includes('/reset-password') || window.location.hash.includes('type=recovery');
   });
 
+  const [showVerifiedSuccess, setShowVerifiedSuccess] = useState<boolean>(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    const search = window.location.search;
+    
+    // Parse any Supabase verification redirect details
+    const params = new URLSearchParams(search || hash.replace('#', '?'));
+    const errorDescription = params.get('error_description') || params.get('error');
+    const type = params.get('type');
+    
+    if (errorDescription && (type === 'signup' || hash.includes('type=signup') || hash.includes('type=invite'))) {
+      setVerificationError(decodeURIComponent(errorDescription).replace(/\+/g, ' '));
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } else if (hash.includes('type=signup') || hash.includes('type=invite') || (search.includes('code=') && localStorage.getItem('awaiting_verification') === 'true')) {
+      setShowVerifiedSuccess(true);
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+      localStorage.removeItem('awaiting_verification');
+    }
+  }, []);
+
   useEffect(() => {
     const handlePopState = () => {
       setIsResetPasswordRoute(window.location.pathname.includes('/reset-password') || window.location.hash.includes('type=recovery'));
@@ -235,13 +316,62 @@ export default function App() {
 
   // 3. UI Navigation parameters
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'clients' | 'leads' | 'projects' | 'payments' | 'calendar' | 'reports' | 'developer' | 'websites' | 'logs' | 'timetracker' | 'profile' | 'archive'
+    'dashboard' | 'clients' | 'leads' | 'projects' | 'payments' | 'calendar' | 'reports' | 'developer' | 'websites' | 'logs' | 'timetracker' | 'profile' | 'archive' | 'settings' | 'addfeature'
   >('dashboard');
+
+  const [previousTab, setPreviousTab] = useState<string>('dashboard');
+
+  useEffect(() => {
+    if (activeTab !== 'settings') {
+      setPreviousTab(activeTab);
+    }
+  }, [activeTab]);
+
+  const [settingsSubTab, setSettingsSubTab] = useState<
+    'profile' | 'reports' | 'archive' | 'developer' | 'logs' | 'backup' | 'howtouse' | 'addfeature' | 'import'
+  >('profile');
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSearchPaletteOpen, setIsSearchPaletteOpen] = useState(false);
   const [globalSearchInput, setGlobalSearchInput] = useState('');
+  const [showHowToUsePopup, setShowHowToUsePopup] = useState(false);
+  const [showAppUpdatedPopup, setShowAppUpdatedPopup] = useState(false);
+  const [enabledFeatures, setEnabledFeatures] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('enabledFeatures');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // Fallback
+      }
+    }
+    return {
+      leads: false,
+      timetracker: true,
+      payments: false,
+      websites: false,
+      calendar: false
+    };
+  });
+
+  const toggleFeature = (featureId: string) => {
+    setEnabledFeatures(prev => {
+      const next = { ...prev, [featureId]: !prev[featureId] };
+      localStorage.setItem('enabledFeatures', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (user && user.email) {
+      const emailKey = `is_new_signup_${user.email.toLowerCase()}`;
+      if (localStorage.getItem(emailKey) === 'true') {
+        setShowHowToUsePopup(true);
+        localStorage.removeItem(emailKey);
+      }
+    }
+  }, [user]);
 
   // Save sync hooks for Supabase CRM tables
   useEffect(() => {
@@ -519,48 +649,107 @@ export default function App() {
 
           {/* Navigation Links list */}
           <nav className={`p-4 space-y-1 ${isMobileMenuOpen ? 'block' : 'hidden md:block'}`}>
-            {[
-              { id: 'dashboard', label: 'Overview Dashboard', icon: Layers },
-              { id: 'clients', label: 'Client CRM Hub', icon: Users },
-              { id: 'leads', label: 'Prospective Leads', icon: Sparkles },
-              { id: 'projects', label: 'Projects Kanban', icon: Briefcase },
-              { id: 'timetracker', label: 'Clockify Tracker', icon: Clock },
-              { id: 'payments', label: 'Payments & Ledger', icon: IndianRupee },
-              { id: 'websites', label: 'Websites Manager', icon: Globe },
-              { id: 'calendar', label: 'Calendar Planner', icon: Calendar },
-              { id: 'reports', label: 'Corporate Reports', icon: FileSpreadsheet },
-              { id: 'profile', label: 'Personalize Profile', icon: User },
-              { id: 'archive', label: 'Archived Folder', icon: Archive },
-              { id: 'developer', label: 'Developer Center', icon: Terminal },
-              { id: 'logs', label: 'Audit Access Logs', icon: ShieldCheck }
-            ].map(tab => {
-              const TabIcon = tab.icon;
-              const isSelected = activeTab === tab.id;
-              
-              return (
+            {activeTab !== 'settings' ? (
+              [
+                { id: 'dashboard', label: 'Overview Dashboard', icon: Layers },
+                { id: 'clients', label: 'Client CRM Hub', icon: Users },
+                { id: 'leads', label: 'Prospective Leads', icon: Sparkles, featureKey: 'leads' },
+                { id: 'projects', label: 'Projects Kanban', icon: Briefcase },
+                { id: 'timetracker', label: 'Time Tracker', icon: Clock, featureKey: 'timetracker' },
+                { id: 'payments', label: 'Expenses', icon: IndianRupee, featureKey: 'payments' },
+                { id: 'websites', label: 'Websites Manager', icon: Globe, featureKey: 'websites' },
+                { id: 'calendar', label: 'Calendar Planner', icon: Calendar, featureKey: 'calendar' },
+                { id: 'settings', label: 'Settings', icon: Settings }
+              ].filter(tab => !tab.featureKey || enabledFeatures[tab.featureKey]).map(tab => {
+                const TabIcon = tab.icon;
+                const isSelected = activeTab === tab.id;
+                
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      if (tab.id === 'settings' && isSelected) {
+                        setActiveTab(previousTab as any);
+                      } else {
+                        setActiveTab(tab.id as any);
+                      }
+                      setIsMobileMenuOpen(false);
+                      writeAuditEntry('Navigation Clicked', `Opened console tab: ${tab.label}`);
+                    }}
+                    title={tab.label}
+                    className={`w-full text-left px-3 py-2 rounded-xl flex items-center gap-3 transition-colors text-xs font-medium border cursor-pointer ${
+                      isSelected 
+                        ? theme === 'light'
+                          ? 'bg-indigo-50 border-indigo-200 text-indigo-650 font-bold shadow-xs'
+                          : 'bg-indigo-950/40 border-indigo-500/30 text-indigo-300 font-semibold shadow-xs' 
+                        : theme === 'light'
+                          ? 'border-transparent hover:bg-gray-100 text-gray-500 hover:text-gray-900'
+                          : 'border-transparent hover:bg-slate-850 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <TabIcon className="w-4 h-4 flex-shrink-0" />
+                    {!isSidebarCollapsed && <span className="truncate">{tab.label}</span>}
+                  </button>
+                );
+              })
+            ) : (
+              <>
                 <button
-                  key={tab.id}
                   onClick={() => {
-                    setActiveTab(tab.id as any);
+                    setActiveTab(previousTab as any);
                     setIsMobileMenuOpen(false);
-                    writeAuditEntry('Navigation Clicked', `Opened console tab: ${tab.label}`);
+                    writeAuditEntry('Navigation Clicked', 'Returned to main menu');
                   }}
-                  title={tab.label}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center gap-3 transition-colors text-xs font-medium border cursor-pointer ${
-                    isSelected 
-                      ? theme === 'light'
-                        ? 'bg-indigo-50 border-indigo-200 text-indigo-650 font-bold shadow-xs'
-                        : 'bg-indigo-950/40 border-indigo-500/30 text-indigo-300 font-semibold shadow-xs' 
-                      : theme === 'light'
-                        ? 'border-transparent hover:bg-gray-100 text-gray-500 hover:text-gray-900'
-                        : 'border-transparent hover:bg-slate-850 text-slate-400 hover:text-slate-200'
+                  title="Back to Menu"
+                  className={`w-full text-left px-3 py-2.5 mb-2.5 rounded-xl flex items-center gap-3 transition-all text-xs font-bold border cursor-pointer ${
+                    theme === 'light'
+                      ? 'bg-gray-100 border-gray-200 hover:bg-gray-200 text-gray-700 shadow-xs'
+                      : 'bg-slate-900 border-slate-800 hover:bg-slate-850 text-slate-300 shadow-md'
                   }`}
                 >
-                  <TabIcon className="w-4 h-4 flex-shrink-0" />
-                  {!isSidebarCollapsed && <span className="truncate">{tab.label}</span>}
+                  <ArrowLeft className="w-4 h-4 flex-shrink-0 text-indigo-500 animate-pulse" />
+                  {!isSidebarCollapsed && <span className="truncate">Back to Menu</span>}
                 </button>
-              );
-            })}
+                {[
+                  { id: 'profile', label: 'Profile Settings', icon: User },
+                  { id: 'howtouse', label: 'How to use', icon: HelpCircle },
+                  { id: 'addfeature', label: 'Add New Feature', icon: PlusCircle },
+                  { id: 'backup', label: 'Download backup', icon: Download },
+                  { id: 'import', label: 'Import spreadsheet', icon: Upload },
+                  { id: 'archive', label: 'Archived folder', icon: Archive },
+                  { id: 'reports', label: 'Corporate reports', icon: FileSpreadsheet },
+                  { id: 'developer', label: 'Developer center', icon: Terminal },
+                  { id: 'logs', label: 'Audit access log', icon: ShieldCheck }
+                ].map(sub => {
+                  const SubIcon = sub.icon;
+                  const isSelected = settingsSubTab === sub.id;
+                  
+                  return (
+                    <button
+                      key={sub.id}
+                      onClick={() => {
+                        setSettingsSubTab(sub.id as any);
+                        setIsMobileMenuOpen(false);
+                        writeAuditEntry('Settings Navigation', `Viewed Settings section: ${sub.label}`);
+                      }}
+                      title={sub.label}
+                      className={`w-full text-left px-3 py-2 rounded-xl flex items-center gap-3 transition-colors text-xs font-medium border cursor-pointer ${
+                        isSelected 
+                          ? theme === 'light'
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-650 font-bold shadow-xs'
+                            : 'bg-indigo-950/40 border-indigo-500/30 text-indigo-300 font-semibold shadow-xs' 
+                          : theme === 'light'
+                            ? 'border-transparent hover:bg-gray-100 text-gray-500 hover:text-gray-900'
+                            : 'border-transparent hover:bg-slate-850 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <SubIcon className="w-4 h-4 flex-shrink-0" />
+                      {!isSidebarCollapsed && <span className="truncate">{sub.label}</span>}
+                    </button>
+                  );
+                })}
+              </>
+            )}
           </nav>
         </div>
 
@@ -624,23 +813,6 @@ export default function App() {
 
           <div className="flex items-center gap-3 mt-3 md:mt-0">
             
-            {/* Real-time multi-sheet workbook Excel backup trigger */}
-            <button
-              onClick={() => {
-                triggerExcelBackupDownload({ clients, leads, projects, tasks, payments, websites, timeLogs });
-                writeAuditEntry('Corporate Backup', 'Downloaded complete business data worksheet with multiple worksheet tabs.');
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer ${
-                theme === 'light'
-                  ? 'bg-indigo-600 hover:bg-indigo-750 text-white shadow-xs'
-                  : 'bg-indigo-600 hover:bg-indigo-750 text-white'
-              }`}
-              title="Download composite Multi-Tab Excel Backup of all business entities"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Full Excel Backup</span>
-            </button>
-
             {/* Theme switcher toggle */}
             <button
               onClick={() => {
@@ -749,17 +921,6 @@ export default function App() {
                 </div>
               )}
             </div>
-
-            {/* Interactive OAuth trigger to Google Workspace client */}
-            <button
-              onClick={() => {
-                setActiveTab('calendar');
-                setIsNotificationsOpen(false);
-              }}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-750 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors"
-            >
-              Launch Board
-            </button>
           </div>
         </header>
 
@@ -776,12 +937,14 @@ export default function App() {
               onNavigate={(tab) => setActiveTab(tab)}
               currentUsername={currentUsername}
               companyName={profileSettings.companyName}
+              enabledFeatures={enabledFeatures}
             />
           )}
 
           {activeTab === 'clients' && (
             <ClientsCRM 
               clients={clients}
+              projects={projects}
               onAddClient={(c) => setClients(prev => [...prev, c])}
               onEditClient={(c) => setClients(prev => prev.map(item => item.id === c.id ? c : item))}
               onDeleteClient={(id) => {
@@ -798,6 +961,9 @@ export default function App() {
                 }
                 setClients(prev => prev.filter(item => item.id !== id));
               }}
+              onAddProject={(p) => setProjects(prev => [...prev, p])}
+              onEditProject={(p) => setProjects(prev => prev.map(item => item.id === p.id ? p : item))}
+              onDeleteProject={(id) => setProjects(prev => prev.filter(item => item.id !== id))}
             />
           )}
 
@@ -901,20 +1067,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'reports' && (
-            <ReportsCenter 
-              clients={clients}
-              projects={projects}
-              tasks={tasks}
-              payments={payments}
-              leads={leads}
-              finances={finances}
-            />
-          )}
 
-          {activeTab === 'developer' && (
-            <DeveloperConsole />
-          )}
 
           {activeTab === 'websites' && (
             <WebsitesManager 
@@ -953,100 +1106,218 @@ export default function App() {
             />
           )}
 
-          {/* VIEW TAB personalizer company custom profile */}
-          {activeTab === 'profile' && (
-            <ProfilePersonalization 
-              settings={profileSettings}
-              onUpdateSettings={(settings) => {
-                setProfileSettings(settings);
-              }}
-              theme={theme}
-            />
-          )}
+          {/* VIEW TAB settings container housing profile, reports, archive, developer, logs, and backup */}
+          {activeTab === 'settings' && (
+            <div className="max-w-6xl mx-auto">
+              {/* Content view */}
+              <div className="w-full min-w-0">
+                {settingsSubTab === 'profile' && (
+                  <ProfilePersonalization 
+                    settings={profileSettings}
+                    onUpdateSettings={(settings) => {
+                      setProfileSettings(settings);
+                    }}
+                    theme={theme}
+                  />
+                )}
 
-          {/* VIEW TAB ARCHIVE CENTER */}
-          {activeTab === 'archive' && (
-            <ArchiveCenter 
-              archivedItems={archivedItems}
-              onRestore={(item) => {
-                setArchivedItems(prev => prev.filter(arch => arch.id !== item.id));
-                switch (item.type) {
-                  case 'client':
-                    setClients(prev => [...prev, item.originalData]);
-                    break;
-                  case 'lead':
-                    setLeads(prev => [...prev, item.originalData]);
-                    break;
-                  case 'project':
-                    setProjects(prev => [...prev, item.originalData]);
-                    break;
-                  case 'task':
-                    setTasks(prev => [...prev, item.originalData]);
-                    break;
-                  case 'payment':
-                    setPayments(prev => [...prev, item.originalData]);
-                    break;
-                  case 'finance':
-                    setFinances(prev => [item.originalData, ...prev]);
-                    break;
-                  case 'website':
-                    setWebsites(prev => [...prev, item.originalData]);
-                    break;
-                }
-                writeAuditEntry('Archive Restored', `Recovered deleted ${item.type}: ${item.name}`);
-              }}
-              onDeletePermanent={(id) => {
-                const target = archivedItems.find(arch => arch.id === id);
-                setArchivedItems(prev => prev.filter(arch => arch.id !== id));
-                if (target) {
-                  writeAuditEntry('Permanent Delete', `Scrubbed archive item: ${target.name}`);
-                }
-              }}
-              theme={theme}
-            />
-          )}
+                {settingsSubTab === 'addfeature' && (
+                  <AddNewFeature 
+                    theme={theme}
+                    enabledFeatures={enabledFeatures}
+                    onToggleFeature={toggleFeature}
+                  />
+                )}
 
-          {/* VIEW TAB 10: REAL-TIME AUDIT LOGS DISPLAY PANE */}
-          {activeTab === 'logs' && (
-            <div className="max-w-4xl mx-auto space-y-6">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                <div>
-                  <h2 className="text-base font-bold text-white font-sans">GrowInvicta Secure Access Logs</h2>
-                  <p className="text-slate-400 text-xs mt-0.5">Automated JWT & User authorization ledger tracking.</p>
-                </div>
-                <button 
-                  onClick={() => {
-                    setAuditLogs([]);
-                    writeAuditEntry('Log purge complete', 'Security console access lists scrubbed.');
-                  }}
-                  className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-rose-400 hover:bg-slate-850 cursor-pointer"
-                >
-                  Scrub Logs
-                </button>
-              </div>
+                {settingsSubTab === 'reports' && (
+                  <ReportsCenter 
+                    clients={clients}
+                    projects={projects}
+                    tasks={tasks}
+                    payments={payments}
+                    leads={leads}
+                    finances={finances}
+                  />
+                )}
 
-              <div className="space-y-2.5">
-                {auditLogs.map(log => (
-                  <div key={log.id} className="p-4 bg-slate-920 border border-slate-850 rounded-xl flex items-start gap-3.5 text-xs font-mono">
-                    <div className="p-1.5 bg-slate-950 rounded border border-slate-800 flex-shrink-0 text-slate-400">
-                      <Lock className="w-4 h-4" />
-                    </div>
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex justify-between text-[10px] text-slate-500">
-                        <span>{log.timestamp}</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-indigo-400 font-semibold">{log.user}</span>
-                          &bull;
-                          <span className="text-slate-400">{log.role}</span>
-                        </div>
+                {settingsSubTab === 'archive' && (
+                  <ArchiveCenter 
+                    archivedItems={archivedItems}
+                    onRestore={(item) => {
+                      setArchivedItems(prev => prev.filter(arch => arch.id !== item.id));
+                      switch (item.type) {
+                        case 'client':
+                          setClients(prev => [...prev, item.originalData]);
+                          break;
+                        case 'lead':
+                          setLeads(prev => [...prev, item.originalData]);
+                          break;
+                        case 'project':
+                          setProjects(prev => [...prev, item.originalData]);
+                          break;
+                        case 'task':
+                          setTasks(prev => [...prev, item.originalData]);
+                          break;
+                        case 'payment':
+                          setPayments(prev => [...prev, item.originalData]);
+                          break;
+                        case 'finance':
+                          setFinances(prev => [item.originalData, ...prev]);
+                          break;
+                        case 'website':
+                          setWebsites(prev => [...prev, item.originalData]);
+                          break;
+                      }
+                      writeAuditEntry('Archive Restored', `Recovered deleted ${item.type}: ${item.name}`);
+                    }}
+                    onDeletePermanent={(id) => {
+                      const target = archivedItems.find(arch => arch.id === id);
+                      setArchivedItems(prev => prev.filter(arch => arch.id !== id));
+                      if (target) {
+                        writeAuditEntry('Permanent Delete', `Scrubbed archive item: ${target.name}`);
+                      }
+                    }}
+                    theme={theme}
+                  />
+                )}
+
+                {settingsSubTab === 'developer' && (
+                  <DeveloperConsole />
+                )}
+
+                {settingsSubTab === 'logs' && (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                      <div>
+                        <h2 className={`text-base font-bold font-sans ${theme === 'light' ? 'text-slate-800' : 'text-white'}`}>GrowInvicta Secure Access Logs</h2>
+                        <p className={`text-xs mt-0.5 ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>Automated JWT & User authorization ledger tracking.</p>
                       </div>
-                      <p className="text-slate-200">
-                        <strong>Action logged: </strong><span className="text-indigo-300">{log.action}</span>
-                      </p>
-                      <p className="text-slate-400 leading-normal font-sans text-[11.5px] italic">Ref: {log.details}</p>
+                      <button 
+                        onClick={() => {
+                          setAuditLogs([]);
+                          writeAuditEntry('Log purge complete', 'Security console access lists scrubbed.');
+                        }}
+                        className={`px-3 py-1.5 border rounded-lg text-xs font-mono text-rose-450 hover:bg-rose-950/20 cursor-pointer ${
+                          theme === 'light' ? 'bg-white border-gray-200' : 'bg-slate-950 border-slate-800'
+                        }`}
+                      >
+                        Scrub Logs
+                      </button>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {auditLogs.map(log => (
+                        <div key={log.id} className={`p-4 border rounded-xl flex items-start gap-3.5 text-xs font-mono ${
+                          theme === 'light' ? 'bg-white border-gray-150 shadow-xs' : 'bg-[#18191d] border-slate-900/60'
+                        }`}>
+                          <div className={`p-1.5 rounded border flex-shrink-0 ${
+                            theme === 'light' ? 'bg-gray-100 border-gray-200 text-gray-500' : 'bg-[#0c0d10] border-slate-900 text-slate-400'
+                          }`}>
+                            <Lock className="w-4 h-4" />
+                          </div>
+                          <div className="space-y-1.5 flex-1 text-left">
+                            <div className="flex justify-between text-[10px] text-slate-500">
+                              <span>{log.timestamp}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{log.user}</span>
+                                &bull;
+                                <span className="text-slate-450">{log.role}</span>
+                              </div>
+                            </div>
+                            <p className={theme === 'light' ? 'text-slate-800' : 'text-slate-200'}>
+                              <strong>Action logged: </strong><span className="text-indigo-650 dark:text-indigo-300">{log.action}</span>
+                            </p>
+                            <p className={`leading-normal font-sans text-[11.5px] italic ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>Ref: {log.details}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )}
+
+                {settingsSubTab === 'backup' && (
+                  <div className={`p-6 rounded-2xl border ${
+                    theme === 'light' ? 'bg-white border-gray-150 shadow-xs' : 'bg-[#18191d] border-slate-900/60 shadow-md'
+                  }`}>
+                    <div className="flex items-start gap-4 mb-6">
+                      <div className="p-3 bg-indigo-600/10 text-indigo-450 rounded-xl">
+                        <Download className="w-6 h-6" />
+                      </div>
+                      <div className="text-left">
+                        <h3 className={`text-base font-bold ${theme === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>Download backup</h3>
+                        <p className={`text-xs mt-1 leading-relaxed ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
+                          Generate and download a real-time, consolidated Multi-Sheet Microsoft Excel workbook containing all business data.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className={`p-4 rounded-xl text-left border ${
+                      theme === 'light' ? 'bg-gray-50 border-gray-150' : 'bg-[#0c0d10] border-slate-900/60'
+                    }`}>
+                      <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${theme === 'light' ? 'text-slate-750' : 'text-slate-300'}`}>
+                        Entities Included in the Export
+                      </h4>
+                      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-450 font-medium">
+                        <li className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                          <span>Client CRM Hub accounts</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                          <span>Prospective leads & sales pipeline</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                          <span>Projects Kanban tasks & milestones</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                          <span>Time tracker logged entries</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                          <span>Financial expense records</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                          <span>Active website manager integrations</span>
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="mt-6 flex justify-start">
+                      <button
+                        onClick={() => {
+                          triggerExcelBackupDownload({ clients, leads, projects, tasks, payments, websites, timeLogs });
+                          writeAuditEntry('Corporate Backup', 'Downloaded complete business data worksheet with multiple worksheet tabs.');
+                        }}
+                        className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-750 text-white rounded-xl text-xs font-bold font-sans transition-all cursor-pointer shadow-xs flex items-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Download master Excel workbook</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {settingsSubTab === 'import' && (
+                  <DataImport 
+                    theme={theme}
+                    clients={clients}
+                    onImportClients={(newClients) => {
+                      setClients(prev => [...prev, ...newClients]);
+                      writeAuditEntry('Import Spreadsheet', `Imported ${newClients.length} clients via bulk upload.`);
+                    }}
+                    onImportWebsites={(newWebsites) => {
+                      setWebsites(prev => [...prev, ...newWebsites]);
+                      writeAuditEntry('Import Spreadsheet', `Imported ${newWebsites.length} websites via bulk upload.`);
+                    }}
+                  />
+                )}
+
+                {settingsSubTab === 'howtouse' && (
+                  <HowToUse theme={theme} />
+                )}
               </div>
             </div>
           )}
@@ -1146,6 +1417,230 @@ export default function App() {
               Press Escape or click closing icon to dim the console.
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* HOW TO USE POPUP ON NEW SIGNUP */}
+      {showHowToUsePopup && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-start justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="relative w-full max-w-5xl my-2 sm:my-8">
+            <HowToUse 
+              theme={theme} 
+              onClose={() => {
+                setShowHowToUsePopup(false);
+                writeAuditEntry('Guide Dismissed', 'Completed reading new user manual.');
+              }} 
+            />
+          </div>
+        </div>
+      )}
+
+      {/* APP UPDATED POPUP */}
+      {showAppUpdatedPopup && user && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`relative w-full max-w-lg rounded-2xl border p-6 md:p-8 shadow-2xl transition-all duration-300 transform scale-100 ${
+            theme === 'light' 
+              ? 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50' 
+              : 'bg-slate-900/95 border-slate-800 text-slate-100 shadow-black/80 backdrop-blur-xl'
+          }`}>
+            {/* Absolute Close Button */}
+            <button
+              onClick={() => {
+                const updateNotifiedKey = `app_updated_notified_v2_${user.id}`;
+                localStorage.setItem(updateNotifiedKey, 'true');
+                setShowAppUpdatedPopup(false);
+                writeAuditEntry('Update Dismissed', 'Acknowledged workspace update notification via close button');
+              }}
+              className={`absolute top-4 right-4 p-1.5 rounded-lg transition-colors cursor-pointer ${
+                theme === 'light'
+                  ? 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/60'
+              }`}
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Pulsing visual top indicator */}
+            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center border shadow-md animate-pulse ${
+                theme === 'light' 
+                  ? 'bg-indigo-600 border-indigo-400 text-white shadow-indigo-200' 
+                  : 'bg-indigo-600 border-indigo-500 text-white shadow-indigo-900/40'
+              }`}>
+                <Sparkles className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="text-center mt-6 space-y-2">
+              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider font-mono uppercase ${
+                theme === 'light' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+              }`}>
+                <Zap className="w-3 h-3 animate-bounce" /> App Update Live &bull; v2.4.0
+              </span>
+              <h3 className="text-xl font-extrabold tracking-tight font-sans">
+                GrowInvicta Workspace Upgraded!
+              </h3>
+              <p className={`text-xs ${theme === 'light' ? 'text-slate-600' : 'text-slate-400'} max-w-sm mx-auto leading-relaxed`}>
+                We've enhanced your SaaS console with automatic workspace seeding, training guides, and optimized database caching.
+              </p>
+            </div>
+
+            {/* List of features */}
+            <div className="mt-6 space-y-3">
+              {[
+                {
+                  title: "Starter Workspace Seeding",
+                  desc: "New accounts now initialize instantly with 4 starter client records and 4 scheduled tasks set."
+                },
+                {
+                  title: "Interactive User Manual",
+                  desc: "Master the agency console with step-by-step instructions. Walkthrough guides are always one click away."
+                },
+                {
+                  title: "Continuous Caching & Speed Boost",
+                  desc: "Enhanced data fetching speeds and reliable session restoration across logins."
+                }
+              ].map((item, idx) => (
+                <div 
+                  key={idx} 
+                  className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
+                    theme === 'light' 
+                      ? 'bg-slate-50/50 hover:bg-slate-50 border-slate-100' 
+                      : 'bg-slate-950/40 hover:bg-slate-950/60 border-slate-800/60'
+                  }`}
+                >
+                  <div className={`mt-0.5 p-1 rounded-lg ${
+                    theme === 'light' ? 'bg-indigo-100 text-indigo-700' : 'bg-indigo-900/30 text-indigo-400'
+                  }`}>
+                    <Check className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <h4 className="text-xs font-bold leading-none">{item.title}</h4>
+                    <p className={`text-[11px] leading-normal ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Buttons */}
+            <div className="mt-8 flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => {
+                  const updateNotifiedKey = `app_updated_notified_v2_${user.id}`;
+                  localStorage.setItem(updateNotifiedKey, 'true');
+                  setShowAppUpdatedPopup(false);
+                  writeAuditEntry('Update Dismissed', 'Acknowledged workspace update notification');
+                }}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all hover:scale-[1.01] flex items-center justify-center gap-1.5 cursor-pointer shadow-sm ${
+                  theme === 'light'
+                    ? 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-300'
+                    : 'bg-slate-100 hover:bg-white text-slate-900'
+                }`}
+              >
+                Explore Workspace
+              </button>
+              <button
+                onClick={() => {
+                  const updateNotifiedKey = `app_updated_notified_v2_${user.id}`;
+                  localStorage.setItem(updateNotifiedKey, 'true');
+                  setShowAppUpdatedPopup(false);
+                  setShowHowToUsePopup(true);
+                  writeAuditEntry('Update Guided Action', 'Initiated manual from update popup notification');
+                }}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all hover:scale-[1.01] flex items-center justify-center gap-1.5 cursor-pointer border ${
+                  theme === 'light'
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                    : 'bg-indigo-600 border-transparent text-white hover:bg-indigo-700'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                Launch Guide Manual
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EMAIL VERIFICATION SUCCESS POPUP */}
+      {showVerifiedSuccess && (
+        <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className={`relative w-full max-w-md rounded-2xl border p-6 md:p-8 shadow-2xl transition-all duration-300 transform scale-100 text-center ${
+            theme === 'light' 
+              ? 'bg-white border-emerald-100 text-slate-900 shadow-emerald-100/40' 
+              : 'bg-slate-900/95 border-emerald-950/60 text-slate-100 shadow-black/80 backdrop-blur-xl'
+          }`}>
+            {/* Visual Top Success Ring */}
+            <div className="absolute -top-7 left-1/2 transform -translate-x-1/2">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center bg-emerald-500 border-4 border-emerald-400 text-white shadow-lg animate-bounce">
+                <ShieldCheck className="w-7 h-7" />
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider font-mono uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Verification Successful
+              </span>
+              <h3 className="text-xl font-black tracking-tight font-sans">
+                You are successfully verified!
+              </h3>
+              <p className={`text-xs ${theme === 'light' ? 'text-slate-600' : 'text-slate-400'} leading-relaxed`}>
+                Enjoy the app! Your GrowInvicta corporate workspace account has been verified successfully. Welcome to your ultimate business management console.
+              </p>
+            </div>
+
+            <div className="mt-8">
+              <button
+                onClick={() => {
+                  setShowVerifiedSuccess(false);
+                }}
+                className="w-full py-3 px-4 rounded-xl text-xs font-bold transition-all hover:scale-[1.01] flex items-center justify-center gap-2 cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20"
+              >
+                Let's Explore the App
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EMAIL VERIFICATION ERROR POPUP */}
+      {verificationError && (
+        <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className={`relative w-full max-w-md rounded-2xl border p-6 md:p-8 shadow-2xl transition-all duration-300 transform scale-100 text-center ${
+            theme === 'light' 
+              ? 'bg-white border-rose-100 text-slate-900 shadow-rose-100/40' 
+              : 'bg-slate-900/95 border-rose-950/60 text-slate-100 shadow-black/80 backdrop-blur-xl'
+          }`}>
+            {/* Visual Top Error Ring */}
+            <div className="absolute -top-7 left-1/2 transform -translate-x-1/2">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center bg-rose-500 border-4 border-rose-400 text-white shadow-lg">
+                <AlertCircle className="w-7 h-7" />
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider font-mono uppercase bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                Verification Failed
+              </span>
+              <h3 className="text-xl font-black tracking-tight font-sans">
+                Could not verify email
+              </h3>
+              <p className={`text-xs ${theme === 'light' ? 'text-slate-600' : 'text-slate-400'} leading-relaxed`}>
+                {verificationError || "The verification link is invalid, expired, or has already been used. Please request a new registration or try logging in."}
+              </p>
+            </div>
+
+            <div className="mt-8">
+              <button
+                onClick={() => {
+                  setVerificationError(null);
+                }}
+                className="w-full py-3 px-4 rounded-xl text-xs font-bold transition-all hover:scale-[1.01] flex items-center justify-center gap-2 cursor-pointer bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-900/20"
+              >
+                Back to Console Login
+              </button>
+            </div>
           </div>
         </div>
       )}

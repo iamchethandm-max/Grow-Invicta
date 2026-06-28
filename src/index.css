@@ -1,102 +1,184 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;750;800&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Outfit", sans-serif;
+  --font-sans: "Atlassian Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: "Atlassian Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Custom Premium Theme overrides - converts standard Tailwind slate classes to sleek Obsidian/Zinc tones */
+  --color-slate-950: #09090b; /* Deep Obsidian true-black */
+  --color-slate-900: #141416; /* Caviar basalt gray cards */
+  --color-slate-850: #1e1e22; /* Fine border grey */
+  --color-slate-800: #27272a; /* Outer border gray */
+  --color-slate-700: #3f3f46;
+  
+  --color-indigo-500: #6366f1; /* Premium Electric Indigo */
+  --color-indigo-600: #4f46e5;
+  --color-indigo-700: #4338ca;
+  --color-indigo-950: #1e1b4b;
+
+  --color-emerald-500: #10b981;
+  --color-emerald-450: #34d399;
 }
 
 @layer base {
-  body {
-    font-family: var(--font-sans);
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
+  
+  body, button, input, select, textarea, option {
+    font-family: var(--font-sans) !important;
+    letter-spacing: -0.01em;
+  }
+  
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-display);
+    font-family: var(--font-display) !important;
+    letter-spacing: -0.02em;
   }
 }
 
-/* Premium Light Mode Style Overrides */
+/* Premium Light Mode - Minimalist Atlassian/Stone Aesthetic */
 .light {
   --bg-primary: #ffffff;
-  --bg-secondary: #f9fafb;
-  --border-primary: #e2e8f0;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
+  --bg-secondary: #f4f5f7; /* Atlassian background light gray */
+  --border-primary: #dfe1e6; /* Atlassian crisp border gray */
+  --text-primary: #172b4d; /* Atlassian dark navy/charcoal for super crisp text */
+  --text-secondary: #42526e; /* Atlassian secondary text */
+  --text-muted: #5e6c84; /* Atlassian muted text for clear contrast */
+}
+
+/* Intercept backgrounds in Light Mode */
+.light .bg-slate-950,
+.light .bg-slate-950\/40,
+.light .bg-slate-950\/60,
+.light .bg-slate-950\/80,
+.light .bg-gray-50 {
+  background-color: var(--bg-secondary) !important;
 }
 
 .light .bg-slate-900,
 .light .bg-slate-900\/40,
 .light .bg-slate-900\/60,
 .light .bg-slate-900\/70,
-.light .bg-slate-900\/80 {
+.light .bg-slate-900\/80,
+.light .bg-white {
   background-color: var(--bg-primary) !important;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03) !important;
+  box-shadow: 0 1px 1px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31) !important;
 }
 
-.light .bg-slate-950,
-.light .bg-slate-950\/40,
-.light .bg-slate-950\/60,
-.light .bg-slate-950\/80 {
-  background-color: var(--bg-secondary) !important;
+.light .bg-slate-800,
+.light .bg-slate-850 {
+  background-color: #ebecf0 !important;
 }
 
+/* Intercept borders in Light Mode */
 .light .border-slate-800,
 .light .border-slate-805,
 .light .border-slate-810,
 .light .border-slate-850,
-.light .border-slate-900 {
+.light .border-slate-900,
+.light .border-gray-200,
+.light .border-slate-700 {
   border-color: var(--border-primary) !important;
 }
 
+/* Intercept texts in Light Mode */
+.light .text-slate-100,
 .light .text-slate-200,
 .light .text-slate-300,
-.light .text-slate-350 {
+.light .text-slate-350,
+.light .text-gray-900 {
   color: var(--text-primary) !important;
+  font-weight: 500; /* Enhance weight slightly to make text extremely crisp */
 }
 
 .light .text-slate-400,
-.light .text-slate-450 {
+.light .text-slate-450,
+.light .text-gray-500 {
   color: var(--text-secondary) !important;
 }
 
-.light .text-slate-500 {
+.light .text-slate-500,
+.light .text-gray-400 {
   color: var(--text-muted) !important;
 }
 
+/* Active highlights, buttons, interactive states in Light Mode */
 .light .hover\:bg-slate-850:hover,
 .light .hover\:bg-slate-900\/50:hover,
-.light .hover\:bg-slate-950:hover {
-  background-color: #f1f5f9 !important;
+.light .hover\:bg-slate-950:hover,
+.light .hover\:bg-gray-100:hover,
+.light .hover\:bg-slate-800:hover,
+.light .hover\:bg-slate-700:hover {
+  background-color: #ebecf0 !important;
 }
 
 .light input:not([type="checkbox"]):not([type="radio"]),
 .light select,
 .light textarea {
-  background-color: #ffffff !important;
+  background-color: #fafbfc !important;
   color: var(--text-primary) !important;
   border-color: var(--border-primary) !important;
 }
 
+.light input:focus,
+.light select:focus,
+.light textarea:focus {
+  background-color: #ffffff !important;
+  border-color: #4c9aff !important; /* Atlassian blue focus */
+}
+
 .light input::placeholder,
 .light textarea::placeholder {
-  color: #94a3b8 !important;
+  color: #7a869a !important;
 }
 
 .light .bg-slate-950\/20 {
-  background-color: rgba(241, 245, 249, 0.6) !important;
+  background-color: rgba(235, 236, 240, 0.8) !important;
 }
 
 .light .text-emerald-400 {
-  color: #059669 !important; /* text-emerald-600 */
+  color: #36b37e !important; /* Atlassian green */
 }
 
 .light .text-indigo-400 {
-  color: #4f46e5 !important; /* text-indigo-600 */
+  color: #0052cc !important; /* Atlassian blue */
 }
 
 .light .text-rose-450 {
-  color: #dc2626 !important; /* text-rose-600 */
+  color: #ff5630 !important; /* Atlassian red */
 }
 
+.light .text-rose-400 {
+  color: #de350b !important; /* Atlassian high-contrast dark red */
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 9999px;
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: #dfe1e6;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #c1c7d0;
+}

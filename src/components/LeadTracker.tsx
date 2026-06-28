@@ -9,6 +9,9 @@ import {
   Phone, Briefcase, ChevronRight, X, AlertCircle, Sparkles
 } from 'lucide-react';
 import { Lead } from '../types';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
+import { formatIndianDate } from '../utils/dateUtils';
+
 
 interface LeadTrackerProps {
   leads: Lead[];
@@ -22,6 +25,7 @@ export default function LeadTracker({ leads, onAddLead, onEditLead, onDeleteLead
   const [selectedSource, setSelectedSource] = useState<string>('All');
   const [selectedPipelineStatus, setSelectedPipelineStatus] = useState<string>('All');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(leads[0] || null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   // Modal forms
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -254,10 +258,7 @@ export default function LeadTracker({ leads, onAddLead, onEditLead, onDeleteLead
                   </button>
                   <button 
                     onClick={() => {
-                      if (confirm(`Remove lead info file for ${selectedLead.company}?`)) {
-                        onDeleteLead(selectedLead.id);
-                        setSelectedLead(leads.find(l => l.id !== selectedLead.id) || null);
-                      }
+                      setIsDeleteConfirmOpen(true);
                     }}
                     className="p-1.5 text-rose-450 bg-rose-950/20 border border-rose-500/20 rounded-lg hover:bg-rose-900/30 cursor-pointer"
                   >
@@ -304,7 +305,7 @@ export default function LeadTracker({ leads, onAddLead, onEditLead, onDeleteLead
                   <span className="text-[9px] text-slate-500 uppercase block tracking-wider mb-1">Follow-up Target</span>
                   <span className="text-amber-400 flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5" />
-                    {selectedLead.followUpDate}
+                    {selectedLead.followUpDate ? formatIndianDate(selectedLead.followUpDate) : '--'}
                   </span>
                 </div>
                 <div>
@@ -636,6 +637,22 @@ export default function LeadTracker({ leads, onAddLead, onEditLead, onDeleteLead
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isDeleteConfirmOpen}
+        onClose={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={() => {
+          if (selectedLead) {
+            onDeleteLead(selectedLead.id);
+            const remaining = leads.filter(l => l.id !== selectedLead.id);
+            setSelectedLead(remaining[0] || null);
+          }
+        }}
+        title="Remove Prospective Lead"
+        message="Are you sure you want to remove this prospective lead? It will be archived and moved to the Archive Center."
+        itemName={selectedLead?.company}
+      />
 
     </div>
   );
