@@ -37,9 +37,9 @@ export default function ReportsCenter({ clients, projects, tasks, payments, lead
         csvData += `"${p.clientName}",${p.invoiceNumber},${p.amount},${p.status},${p.gstAmount},${p.dueDate}\r\n`;
       });
     } else if (selectedReportType === 'Client') {
-      csvData += `Company,Representative,Email,Phone,GSTIN,Agreement value\r\n`;
+      csvData += `Company,Representative,Email,Phone,GSTIN,Monthly Retainer Amount\r\n`;
       clients.forEach(c => {
-        csvData += `"${c.company}","${c.name}",${c.email},${c.mobile},${c.gstNumber},${c.metrics.totalBilled}\r\n`;
+        csvData += `"${c.company}","${c.name}",${c.email},${c.mobile},${c.gstNumber},${c.metrics?.monthlyRetainerAmount || 0}\r\n`;
       });
     } else if (selectedReportType === 'Lead') {
       csvData += `Lead Name,Company Name,Source,Phone,Email,Status,Value (INR)\r\n`;
@@ -183,7 +183,7 @@ export default function ReportsCenter({ clients, projects, tasks, payments, lead
                       <th className="p-3">Partner Industry brand</th>
                       <th className="p-3">Primary Representative</th>
                       <th className="p-3">Contact Email</th>
-                      <th className="p-3 text-right">Agreements value</th>
+                      <th className="p-3 text-right">Monthly Retainer Amount</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-850 text-slate-300">
@@ -192,7 +192,7 @@ export default function ReportsCenter({ clients, projects, tasks, payments, lead
                         <td className="p-3 font-semibold text-slate-100">{c.company}</td>
                         <td className="p-3">{c.name}</td>
                         <td className="p-3 font-mono text-indigo-400">{c.email}</td>
-                        <td className="p-3 text-right font-bold text-slate-200">₹{c.metrics.totalBilled.toLocaleString('en-IN')}</td>
+                        <td className="p-3 text-right font-bold text-slate-200">₹{(c.metrics?.monthlyRetainerAmount || 0).toLocaleString('en-IN')}</td>
                       </tr>
                     ))}
                   </tbody>

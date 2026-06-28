@@ -452,6 +452,62 @@ export default function App() {
   useEffect(() => { saveStateToStorage('theme', theme); }, [theme]);
   useEffect(() => { saveStateToStorage('isSidebarCollapsed', isSidebarCollapsed); }, [isSidebarCollapsed]);
 
+  // Sync state across multiple iframe preview viewports (Desktop, Tablet, Mobile) or tabs in real-time
+  useEffect(() => {
+    if (!user) return;
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (!e.key || e.newValue === null) return;
+      
+      const getParsedValue = (val: string) => {
+        try {
+          return JSON.parse(val);
+        } catch {
+          return null;
+        }
+      };
+
+      const parsed = getParsedValue(e.newValue);
+      if (parsed === null) return;
+
+      const userId = user.id;
+      
+      // CRM Main Tables Sync
+      if (e.key === `supabase_user_${userId}_clients`) {
+        setClients(parsed);
+      } else if (e.key === `supabase_user_${userId}_leads`) {
+        setLeads(parsed);
+      } else if (e.key === `supabase_user_${userId}_projects`) {
+        setProjects(parsed);
+      } else if (e.key === `supabase_user_${userId}_tasks`) {
+        setTasks(parsed);
+      } else if (e.key === `supabase_user_${userId}_payments`) {
+        setPayments(parsed);
+      }
+      // CRM Auxiliary Local Tables Sync
+      else if (e.key === `user_${userId}_finances`) {
+        setFinances(parsed);
+      } else if (e.key === `user_${userId}_reminders`) {
+        setReminders(parsed);
+      } else if (e.key === `user_${userId}_auditLogs`) {
+        setAuditLogs(parsed);
+      } else if (e.key === `user_${userId}_websites`) {
+        setWebsites(parsed);
+      } else if (e.key === `user_${userId}_timeLogs`) {
+        setTimeLogs(parsed);
+      } else if (e.key === `user_${userId}_archivedItems`) {
+        setArchivedItems(parsed);
+      } else if (e.key === `user_${userId}_profileSettings`) {
+        setProfileSettings(parsed);
+      } else if (e.key === 'enabledFeatures') {
+        setEnabledFeatures(parsed);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [user]);
+
   // Automatic monthly invoice generation on 1st of month or previous day
   useEffect(() => {
     const checkAndRunAutoInvoiceGeneration = () => {

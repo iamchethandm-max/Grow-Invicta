@@ -94,15 +94,25 @@ export default function Dashboard({
   const todayStr = '2026-06-19';
   const overdueTasks = tasks.filter(t => t.status !== 'Completed' && t.dueDate < todayStr).length;
 
-  // Revenue analytics
+  // Revenue analytics - Reflects monthly retainer money (payments) as well as any other works done and added in income (finances ledger)
+  const generalFinanceIncome = finances
+    .filter(f => {
+      if (f.type !== 'Income') return false;
+      const notes = (f.notes || '').toLowerCase();
+      const source = (f.sourceOrName || '').toLowerCase();
+      // Avoid counting invoice logs to prevent double counting
+      return !(notes.includes('invoice') || source.includes('invoice'));
+    })
+    .reduce((sum, f) => sum + f.amount, 0);
+
   const totalRevenue = payments
     .filter(p => p.status === 'Paid' || p.status === 'Partial')
-    .reduce((sum, p) => sum + p.paidAmount, 0);
+    .reduce((sum, p) => sum + p.paidAmount, 0) + generalFinanceIncome;
 
-  // Monthly Revenue for June 2026
-  const monthlyRevenue = payments
-    .filter(p => (p.status === 'Paid' || p.status === 'Partial') && p.paymentDate.startsWith('2026-06'))
-    .reduce((sum, p) => sum + p.paidAmount, 0);
+  // Monthly Revenue - Shows ONLY the total amount from the active retainer clients
+  const monthlyRevenue = clients
+    .filter(c => c.status === 'Active' && (c.metrics?.workType === 'retainer' || (c.metrics?.monthlyRetainerAmount && c.metrics.monthlyRetainerAmount > 0)))
+    .reduce((sum, c) => sum + (c.metrics?.monthlyRetainerAmount || 0), 0);
 
   const pendingPayments = payments
     .filter(p => p.status === 'Pending' || p.status === 'Partial' || p.status === 'Overdue')
@@ -438,7 +448,7 @@ export default function Dashboard({
               {monthlyRevenue.toLocaleString('en-IN')}
             </div>
             <div className="text-[10px] text-slate-400 mt-1">
-              Received in June 2026
+              Active retainer clients value
             </div>
           </div>
         )}

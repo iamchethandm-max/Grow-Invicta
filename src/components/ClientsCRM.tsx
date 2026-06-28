@@ -379,8 +379,8 @@ export default function ClientsCRM({
 
                 <div className="grid grid-cols-2 gap-2 mt-3 pt-2.5 border-t border-slate-900 text-[10px] text-slate-400 font-mono">
                   <div>
-                    <span className="text-slate-500 uppercase block text-[8px]">Agreements value</span>
-                    <span className="text-slate-200">₹{c.metrics.totalBilled.toLocaleString('en-IN')}</span>
+                    <span className="text-slate-500 uppercase block text-[8px]">Monthly Retainer Amount</span>
+                    <span className="text-slate-200">₹{(c.metrics?.monthlyRetainerAmount || 0).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="text-right">
                     <span className="text-slate-500 uppercase block text-[8px]">Website link</span>
