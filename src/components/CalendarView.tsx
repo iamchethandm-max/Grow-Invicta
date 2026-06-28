@@ -20,7 +20,7 @@ interface CalendarViewProps {
 }
 
 export default function CalendarView({ tasks, projects, payments, onTriggerOAuth }: CalendarViewProps) {
-  const { session, signInWithGoogle } = useAuth();
+  const { session, signInWithGoogle, providerToken } = useAuth();
   const [calendarViewMode, setCalendarViewMode] = useState<'Month' | 'Week' | 'Day'>('Month');
   const [currentCalendarMonth, setCurrentCalendarMonth] = useState('June 2026');
 
@@ -93,10 +93,10 @@ export default function CalendarView({ tasks, projects, payments, onTriggerOAuth
 
   // Auto-fetch if token is available
   useEffect(() => {
-    if (session?.provider_token) {
-      fetchGoogleCalendarEvents(session.provider_token);
+    if (providerToken) {
+      fetchGoogleCalendarEvents(providerToken);
     }
-  }, [session?.provider_token]);
+  }, [providerToken]);
 
   // We are in June 2026. June 1st, 2026 is a Monday.
   // Generate 35 calendar day boxes covering June 2026.
@@ -151,8 +151,8 @@ export default function CalendarView({ tasks, projects, payments, onTriggerOAuth
     
     const googleScopes = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events';
     
-    if (session?.provider_token) {
-      await fetchGoogleCalendarEvents(session.provider_token);
+    if (providerToken) {
+      await fetchGoogleCalendarEvents(providerToken);
     } else {
       setSyncLogs(prev => [...prev, 'Authenticating session with Google scopes...']);
       const { error } = await signInWithGoogle(googleScopes);

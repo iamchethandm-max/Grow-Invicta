@@ -147,26 +147,28 @@ export default function ReportsCenter({ clients, projects, tasks, payments, lead
             </div>
 
             <div className="border border-slate-800 rounded-xl overflow-hidden text-xs">
-              <table className="w-full text-left">
-                <thead className="bg-slate-950 text-slate-400 font-mono uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3">Invoiced client name</th>
-                    <th className="p-3">Ref ID</th>
-                    <th className="p-3">GST value</th>
-                    <th className="p-3 text-right">Value (INR)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-850 text-slate-300">
-                  {payments.map(p => (
-                    <tr key={p.id} className="hover:bg-slate-950/40">
-                      <td className="p-3 font-semibold text-slate-100">{p.clientName}</td>
-                      <td className="p-3 font-mono text-indigo-400">{p.invoiceNumber}</td>
-                      <td className="p-3 font-mono">₹{p.gstAmount.toLocaleString('en-IN')}</td>
-                      <td className="p-3 text-right font-semibold font-mono text-slate-200">₹{p.amount.toLocaleString('en-IN')}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left min-w-[600px]">
+                  <thead className="bg-slate-950 text-slate-400 font-mono uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3">Invoiced client name</th>
+                      <th className="p-3">Ref ID</th>
+                      <th className="p-3">GST value</th>
+                      <th className="p-3 text-right">Value (INR)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850 text-slate-300">
+                    {payments.map(p => (
+                      <tr key={p.id} className="hover:bg-slate-950/40">
+                        <td className="p-3 font-semibold text-slate-100">{p.clientName}</td>
+                        <td className="p-3 font-mono text-indigo-400">{p.invoiceNumber}</td>
+                        <td className="p-3 font-mono">₹{p.gstAmount.toLocaleString('en-IN')}</td>
+                        <td className="p-3 text-right font-semibold font-mono text-slate-200">₹{p.amount.toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -174,26 +176,28 @@ export default function ReportsCenter({ clients, projects, tasks, payments, lead
         {selectedReportType === 'Client' && (
           <div className="space-y-4">
             <div className="border border-slate-805 rounded-xl overflow-hidden text-xs">
-              <table className="w-full text-left">
-                <thead className="bg-slate-950 text-slate-400 font-mono uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3">Partner Industry brand</th>
-                    <th className="p-3">Primary Representative</th>
-                    <th className="p-3">Contact Email</th>
-                    <th className="p-3 text-right">Agreements value</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-850 text-slate-300">
-                  {clients.map(c => (
-                    <tr key={c.id} className="hover:bg-slate-950/40">
-                      <td className="p-3 font-semibold text-slate-100">{c.company}</td>
-                      <td className="p-3">{c.name}</td>
-                      <td className="p-3 font-mono text-indigo-400">{c.email}</td>
-                      <td className="p-3 text-right font-bold text-slate-200">₹{c.metrics.totalBilled.toLocaleString('en-IN')}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left min-w-[650px]">
+                  <thead className="bg-slate-950 text-slate-400 font-mono uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3">Partner Industry brand</th>
+                      <th className="p-3">Primary Representative</th>
+                      <th className="p-3">Contact Email</th>
+                      <th className="p-3 text-right">Agreements value</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850 text-slate-300">
+                    {clients.map(c => (
+                      <tr key={c.id} className="hover:bg-slate-950/40">
+                        <td className="p-3 font-semibold text-slate-100">{c.company}</td>
+                        <td className="p-3">{c.name}</td>
+                        <td className="p-3 font-mono text-indigo-400">{c.email}</td>
+                        <td className="p-3 text-right font-bold text-slate-200">₹{c.metrics.totalBilled.toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -212,26 +216,28 @@ export default function ReportsCenter({ clients, projects, tasks, payments, lead
             </div>
 
             <div className="border border-slate-800 rounded-xl overflow-hidden">
-              <table className="w-full text-left text-slate-300">
-                <thead className="bg-slate-950 text-slate-400 uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3">Client Prospect</th>
-                    <th className="p-3">Lead Source</th>
-                    <th className="p-3">Deal status</th>
-                    <th className="p-3 text-right font-sans">Gross Value</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-850">
-                  {leads.map(l => (
-                    <tr key={l.id} className="hover:bg-slate-950/40">
-                      <td className="p-3 font-bold text-slate-100 font-sans">{l.company}</td>
-                      <td className="p-3">{l.source}</td>
-                      <td className="p-3 text-indigo-400">{l.status}</td>
-                      <td className="p-3 text-right font-bold">₹{l.value.toLocaleString('en-IN')}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-slate-300 min-w-[550px]">
+                  <thead className="bg-slate-950 text-slate-400 uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3">Client Prospect</th>
+                      <th className="p-3">Lead Source</th>
+                      <th className="p-3">Deal status</th>
+                      <th className="p-3 text-right font-sans">Gross Value</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850">
+                    {leads.map(l => (
+                      <tr key={l.id} className="hover:bg-slate-950/40">
+                        <td className="p-3 font-bold text-slate-100 font-sans">{l.company}</td>
+                        <td className="p-3">{l.source}</td>
+                        <td className="p-3 text-indigo-400">{l.status}</td>
+                        <td className="p-3 text-right font-bold">₹{l.value.toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -239,26 +245,28 @@ export default function ReportsCenter({ clients, projects, tasks, payments, lead
         {selectedReportType === 'Expense' && (
           <div className="space-y-4">
             <div className="border border-slate-800 rounded-xl overflow-hidden text-xs">
-              <table className="w-full text-left">
-                <thead className="bg-slate-950 text-slate-400 font-mono uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3">Expense Name</th>
-                    <th className="p-3">Category</th>
-                    <th className="p-3">Date</th>
-                    <th className="p-3 text-right">Value (INR)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-850 text-slate-300">
-                  {finances.filter(f => f.type === 'Expense').map(f => (
-                    <tr key={f.id} className="hover:bg-slate-950/40">
-                      <td className="p-3 font-semibold text-slate-100">{f.sourceOrName}</td>
-                      <td className="p-3 font-mono">{f.category}</td>
-                      <td className="p-3 font-mono text-slate-400">{f.date}</td>
-                      <td className="p-3 text-right font-mono text-rose-400">-₹{f.amount.toLocaleString('en-IN')}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left min-w-[550px]">
+                  <thead className="bg-slate-950 text-slate-400 font-mono uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3">Expense Name</th>
+                      <th className="p-3">Category</th>
+                      <th className="p-3">Date</th>
+                      <th className="p-3 text-right">Value (INR)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850 text-slate-300">
+                    {finances.filter(f => f.type === 'Expense').map(f => (
+                      <tr key={f.id} className="hover:bg-slate-950/40">
+                        <td className="p-3 font-semibold text-slate-100">{f.sourceOrName}</td>
+                        <td className="p-3 font-mono">{f.category}</td>
+                        <td className="p-3 font-mono text-slate-400">{f.date}</td>
+                        <td className="p-3 text-right font-mono text-rose-400">-₹{f.amount.toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -267,31 +275,33 @@ export default function ReportsCenter({ clients, projects, tasks, payments, lead
           <div className="space-y-4">
             <h4 className="text-xs font-bold font-mono text-slate-400 uppercase">Operational Employee Speeds</h4>
             <div className="border border-slate-800 rounded-xl overflow-hidden text-xs">
-              <table className="w-full text-left text-slate-300">
-                <thead className="bg-slate-950 text-slate-400 font-mono uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3">Employee Name</th>
-                    <th className="p-3 text-center">Open Tasks</th>
-                    <th className="p-3 text-center">Completed Work</th>
-                    <th className="p-3 text-right">Primary Assignments</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-850">
-                  {[
-                    { name: 'Siddharth Roy', open: 2, done: 4, role: 'Senior React Architect' },
-                    { name: 'Nisha Sen', open: 1, done: 3, role: 'Shopify Checkout Engineer' },
-                    { name: 'Diana Prince', open: 1, done: 2, role: 'Creative UI Designer' },
-                    { name: 'Aarav Gupta', open: 1, done: 1, role: 'Quality Analyst' }
-                  ].map((emp, idx) => (
-                    <tr key={idx} className="hover:bg-slate-950/40">
-                      <td className="p-3 font-bold text-slate-100">{emp.name}</td>
-                      <td className="p-3 text-center font-mono text-amber-400">{emp.open}</td>
-                      <td className="p-3 text-center font-mono text-emerald-400">{emp.done}</td>
-                      <td className="p-3 text-right text-slate-400 font-mono text-[11px]">{emp.role}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-slate-300 min-w-[600px]">
+                  <thead className="bg-slate-950 text-slate-400 font-mono uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3">Employee Name</th>
+                      <th className="p-3 text-center">Open Tasks</th>
+                      <th className="p-3 text-center">Completed Work</th>
+                      <th className="p-3 text-right">Primary Assignments</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850">
+                    {[
+                      { name: 'Siddharth Roy', open: 2, done: 4, role: 'Senior React Architect' },
+                      { name: 'Nisha Sen', open: 1, done: 3, role: 'Shopify Checkout Engineer' },
+                      { name: 'Diana Prince', open: 1, done: 2, role: 'Creative UI Designer' },
+                      { name: 'Aarav Gupta', open: 1, done: 1, role: 'Quality Analyst' }
+                    ].map((emp, idx) => (
+                      <tr key={idx} className="hover:bg-slate-950/40">
+                        <td className="p-3 font-bold text-slate-100">{emp.name}</td>
+                        <td className="p-3 text-center font-mono text-amber-400">{emp.open}</td>
+                        <td className="p-3 text-center font-mono text-emerald-400">{emp.done}</td>
+                        <td className="p-3 text-right text-slate-400 font-mono text-[11px]">{emp.role}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -299,32 +309,34 @@ export default function ReportsCenter({ clients, projects, tasks, payments, lead
         {selectedReportType === 'Project' && (
           <div className="space-y-4">
             <div className="border border-slate-800 rounded-xl overflow-hidden text-xs">
-              <table className="w-full text-left text-slate-300">
-                <thead className="bg-slate-950 text-slate-400 font-mono uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3">Project Campaign</th>
-                    <th className="p-3 font-mono">End Date</th>
-                    <th className="p-3">SLA Status</th>
-                    <th className="p-3 text-right font-mono">Budget (INR)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-850">
-                  {projects.map(p => (
-                    <tr key={p.id} className="hover:bg-slate-950/40">
-                      <td className="p-3 font-bold text-slate-100">{p.name}</td>
-                      <td className="p-3 font-mono text-slate-400">{p.endDate}</td>
-                      <td className="p-3 font-sans">
-                        <span className={`px-2 py-0.5 rounded text-[10px] ${
-                          p.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-300'
-                        }`}>
-                          {p.status}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right font-bold">₹{p.budget.toLocaleString('en-IN')}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-slate-300 min-w-[550px]">
+                  <thead className="bg-slate-950 text-slate-400 font-mono uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3">Project Campaign</th>
+                      <th className="p-3 font-mono">End Date</th>
+                      <th className="p-3">SLA Status</th>
+                      <th className="p-3 text-right font-mono">Budget (INR)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850">
+                    {projects.map(p => (
+                      <tr key={p.id} className="hover:bg-slate-950/40">
+                        <td className="p-3 font-bold text-slate-100">{p.name}</td>
+                        <td className="p-3 font-mono text-slate-400">{p.endDate}</td>
+                        <td className="p-3 font-sans">
+                          <span className={`px-2 py-0.5 rounded text-[10px] ${
+                            p.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-300'
+                          }`}>
+                            {p.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-bold">₹{p.budget.toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

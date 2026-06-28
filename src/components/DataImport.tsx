@@ -107,45 +107,50 @@ export default function DataImport({ theme, clients, onImportClients, onImportWe
 
     dataRows.forEach((row, idx) => {
       const rowNum = idx + 2; // index is 0-based, header is row 1
-      const item: any = {};
       
-      // Map row values to keys based on header positioning
-      headers.forEach((header, colIdx) => {
-        item[header] = row[colIdx] || '';
-      });
+      // Smart fuzzy matching helper for header keys
+      const getVal = (matchers: string[], fallback: string = ''): string => {
+        for (let i = 0; i < headers.length; i++) {
+          const h = headers[i];
+          if (matchers.some(m => h.includes(m) || m.includes(h))) {
+            return (row[i] || '').trim();
+          }
+        }
+        return fallback;
+      };
 
       if (importType === 'clients') {
-        // Validate Client Fields
-        // Expected headers match keys or their close variants: name, company, email, mobile, whatsapp, address, gstnumber, website, notes, status, totalbilled, pendinginvoice, worktype, monthlyretaineramount
-        const name = item.name || item.clientname || item.fullname || '';
-        const company = item.company || item.companyname || item.clientcompany || '';
+        let name = getVal(['name', 'clientname', 'fullname', 'contact', 'owner', 'proprietor', 'user']);
+        let company = getVal(['company', 'companyname', 'firm', 'organization', 'agency', 'clientcompany', 'business']);
 
-        if (!name) {
-          errors.push(`Row ${rowNum}: 'name' is required for clients.`);
-          return;
-        }
-        if (!company) {
-          errors.push(`Row ${rowNum}: 'company' is required for clients.`);
-          return;
+        // Completely lenient fallback so no row ever gets blocked
+        if (!name && !company) {
+          name = `Imported Client ${rowNum}`;
+          company = `Company ${rowNum}`;
+        } else if (!name) {
+          name = company;
+        } else if (!company) {
+          company = name;
         }
 
-        const email = item.email || '';
-        const mobile = item.mobile || item.phone || '';
-        const whatsapp = item.whatsapp || mobile || ''; // fallback to mobile
-        const address = item.address || '';
-        const gstNumber = item.gstnumber || item.gst || item.gstin || '';
-        const website = item.website || item.site || '';
-        const notes = item.notes || item.description || item.comment || '';
+        const email = getVal(['email', 'mail', 'contactemail']);
+        const mobile = getVal(['mobile', 'phone', 'contactnumber', 'tel', 'telephone', 'cell']);
+        const whatsapp = getVal(['whatsapp', 'wa', 'chat']) || mobile;
+        const address = getVal(['address', 'location', 'city', 'office']);
+        const gstNumber = getVal(['gst', 'gstnumber', 'gstin', 'tax', 'taxid']);
+        const website = getVal(['website', 'site', 'url', 'link', 'domain']);
+        const notes = getVal(['notes', 'note', 'desc', 'description', 'info', 'remarks']);
         
         let status: 'Active' | 'Inactive' = 'Active';
-        if (item.status && (item.status.toLowerCase() === 'inactive' || item.status.toLowerCase() === 'off')) {
+        const rawStatus = getVal(['status', 'state', 'active']).toLowerCase();
+        if (rawStatus === 'inactive' || rawStatus === 'off' || rawStatus === 'suspended') {
           status = 'Inactive';
         }
 
-        const totalBilled = Number(item.totalbilled || item.billed || 0);
-        const pendingInvoice = Number(item.pendinginvoice || item.pending || item.unpaid || 0);
-        const workType: 'retainer' | 'one-time' = (item.worktype && item.worktype.toLowerCase() === 'retainer') ? 'retainer' : 'one-time';
-        const monthlyRetainerAmount = Number(item.monthlyretaineramount || item.retaineramount || item.monthlyretainer || 0);
+        const totalBilled = parseFloat(getVal(['totalbilled', 'billed', 'amount', 'paid', 'total'], '0').replace(/[^0-9.]/g, '')) || 0;
+        const pendingInvoice = parseFloat(getVal(['pending', 'unpaid', 'due', 'pendinginvoice', 'invoice'], '0').replace(/[^0-9.]/g, '')) || 0;
+        const workType: 'retainer' | 'one-time' = getVal(['worktype', 'type', 'billingtype', 'retainer']).toLowerCase().includes('retainer') ? 'retainer' : 'one-time';
+        const monthlyRetainerAmount = parseFloat(getVal(['monthlyretainer', 'retaineramount', 'monthly', 'monthlyfee', 'subscription'], '0').replace(/[^0-9.]/g, '')) || 0;
 
         items.push({
           id: `client_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -180,44 +185,54 @@ export default function DataImport({ theme, clients, onImportClients, onImportWe
         });
 
       } else {
-        // Validate Website Fields
-        // Expected headers: name, url, hostingprovider, hostingprice, hostingbilldate, domainregistrar, domainprice, domainbilldate, status, notes, clientname
-        const name = item.name || item.websitename || item.site || '';
-        const url = item.url || item.websiteurl || item.link || '';
+        // Smart matching for Website Fields
+        let name = getVal(['name', 'title', 'site', 'website', 'app', 'project', 'label', 'identity']);
+        let url = getVal(['url', 'link', 'domain', 'address', 'href', 'hosturl', 'websiteurl']);
 
-        if (!name) {
-          errors.push(`Row ${rowNum}: 'name' is required for websites.`);
-          return;
-        }
-        if (!url) {
-          errors.push(`Row ${rowNum}: 'url' is required for websites.`);
-          return;
+        // Absolutely lenient fallback: derive or auto-generate so nothing is rejected
+        if (!name && !url) {
+          name = `Imported Site ${rowNum}`;
+          url = `https://imported-site-${rowNum}.com`;
+        } else if (!name) {
+          try {
+            const cleanUrl = url.startsWith('http') ? url : `https://${url}`;
+            const urlObj = new URL(cleanUrl);
+            name = urlObj.hostname.replace('www.', '');
+          } catch {
+            name = url;
+          }
+        } else if (!url) {
+          const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          url = `https://${slug || 'site'}.com`;
         }
 
-        const hostingProvider = item.hostingprovider || item.host || '';
-        const hostingPrice = Number(item.hostingprice || item.hostprice || 0);
-        const hostingBillDate = item.hostingbilldate || item.hostdate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const hostingProvider = getVal(['hostingprovider', 'host', 'provider', 'server', 'cloud'], 'Hostinger Share Node');
+        const hostingPrice = parseFloat(getVal(['hostingprice', 'hostprice', 'hostingcost', 'hostingfee', 'hostingamount', 'servercost', 'serverprice'], '0').replace(/[^0-9.]/g, '')) || 0;
+        const hostingBillDate = getVal(['hostingbilldate', 'hostdate', 'hostingbill', 'hostingdue', 'hostbill', 'hostbilldate', 'hostdue', 'hostingrenewal'], new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
         
-        const domainRegistrar = item.domainregistrar || item.registrar || '';
-        const domainPrice = Number(item.domainprice || item.regprice || 0);
-        const domainBillDate = item.domainbilldate || item.domaindate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const domainRegistrar = getVal(['domainregistrar', 'registrar', 'godaddy', 'namecheap', 'domainprovider', 'registry'], 'Namecheap');
+        const domainPrice = parseFloat(getVal(['domainprice', 'domaincost', 'domainfee', 'domainamount', 'regprice', 'registrarprice', 'domainrenewalcost'], '0').replace(/[^0-9.]/g, '')) || 0;
+        const domainBillDate = getVal(['domainbilldate', 'domaindate', 'domainbill', 'domaindue', 'registrardate', 'domainbilldate', 'domaindue', 'domainrenewal'], new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
 
-        let status: 'Active' | 'Under Maintenance' | 'Suspended' = 'Active';
-        if (item.status) {
-          const s = item.status.toLowerCase();
-          if (s.includes('maintenance')) status = 'Under Maintenance';
-          else if (s.includes('suspended') || s.includes('inactive')) status = 'Suspended';
+        let status: 'Active' | 'Inactive' | 'Under Maintenance' | 'Suspended' = 'Active';
+        const rawStatus = getVal(['status', 'active', 'state', 'condition']).toLowerCase();
+        if (rawStatus.includes('maintenance')) {
+          status = 'Under Maintenance';
+        } else if (rawStatus.includes('inactive') || rawStatus === 'off') {
+          status = 'Inactive';
+        } else if (rawStatus.includes('suspended')) {
+          status = 'Suspended';
         }
 
-        const notes = item.notes || item.desc || item.credentials || '';
-        const clientNameField = item.clientname || item.client || item.owner || '';
+        const notes = getVal(['notes', 'note', 'desc', 'description', 'comment', 'info', 'credential', 'credentials', 'detail', 'details', 'about', 'remarks']);
+        const clientNameField = getVal(['clientname', 'client', 'owner', 'customer', 'contact', 'user', 'company', 'firm']);
         
         // Match with existing client names to find client ID
         let clientId = '';
         if (clientNameField) {
           const matchedClient = clients.find(c => 
-            c.name.toLowerCase() === clientNameField.toLowerCase() || 
-            c.company.toLowerCase() === clientNameField.toLowerCase()
+            c.name.toLowerCase().includes(clientNameField.toLowerCase()) || 
+            c.company.toLowerCase().includes(clientNameField.toLowerCase())
           );
           if (matchedClient) {
             clientId = matchedClient.id;

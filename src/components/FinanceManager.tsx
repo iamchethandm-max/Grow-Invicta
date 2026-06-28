@@ -50,6 +50,78 @@ export default function FinanceManager({
   const [formStatus, setFormStatus] = useState<Payment['status']>('Pending');
   const [addGst, setAddGst] = useState(true); // GST toggle state as requested
 
+  // Edit Invoice custom state variables
+  const [editLogoUrl, setEditLogoUrl] = useState('');
+  const [editLogoText, setEditLogoText] = useState('');
+  const [editInvoiceNumber, setEditInvoiceNumber] = useState('');
+  const [editOurName, setEditOurName] = useState('');
+  const [editOurPhone, setEditOurPhone] = useState('');
+  const [editOurEmail, setEditOurEmail] = useState('');
+  const [editClientName, setEditClientName] = useState('');
+  const [editClientPhone, setEditClientPhone] = useState('');
+  const [editClientEmail, setEditClientEmail] = useState('');
+  const [editServiceDetails, setEditServiceDetails] = useState('');
+  const [editServiceDescription, setEditServiceDescription] = useState('');
+  const [editAmount, setEditAmount] = useState<number>(0);
+  const [editGstAmount, setEditGstAmount] = useState<number>(0);
+  const [editBankName, setEditBankName] = useState('');
+  const [editBankAccNo, setEditBankAccNo] = useState('');
+  const [editBankIfsc, setEditBankIfsc] = useState('');
+  const [editBankUpi, setEditBankUpi] = useState('');
+  const [isSavedMessageVisible, setIsSavedMessageVisible] = useState(false);
+
+  const openInvoicePreview = (payment: Payment) => {
+    setEditLogoUrl(payment.logoUrl || '');
+    setEditLogoText(payment.customLogoText || 'GrowInvicta Agency Ltd');
+    setEditInvoiceNumber(payment.invoiceNumber || '');
+    setEditOurName(payment.ourName || 'GrowInvicta Agency Ltd');
+    setEditOurPhone(payment.ourPhone || '+91 98450 12345');
+    setEditOurEmail(payment.ourEmail || 'iamchethandm@gmail.com');
+    setEditClientName(payment.clientName || '');
+    setEditClientPhone(payment.clientPhone || '');
+    setEditClientEmail(payment.clientEmail || '');
+    setEditServiceDetails(payment.serviceDetails || 'Agency Custom Campaign Development');
+    setEditServiceDescription(payment.serviceDescription || 'Custom layout templates, SEO tags and database reconciliation.');
+    setEditAmount(payment.amount || 0);
+    setEditGstAmount(payment.gstAmount || 0);
+    setEditBankName(payment.bankName || 'HDFC Bank Ltd');
+    setEditBankAccNo(payment.bankAccNo || '50200012345678');
+    setEditBankIfsc(payment.bankIfsc || 'HDFC0000123');
+    setEditBankUpi(payment.bankUpi || 'growinvicta@upi');
+    
+    setSelectedPayment(payment);
+    setIsInvoicePreviewOpen(true);
+  };
+
+  const handleSaveEditedInvoice = () => {
+    if (!selectedPayment) return;
+    const updated: Payment = {
+      ...selectedPayment,
+      logoUrl: editLogoUrl,
+      customLogoText: editLogoText,
+      invoiceNumber: editInvoiceNumber,
+      ourName: editOurName,
+      ourPhone: editOurPhone,
+      ourEmail: editOurEmail,
+      clientName: editClientName,
+      clientPhone: editClientPhone,
+      clientEmail: editClientEmail,
+      serviceDetails: editServiceDetails,
+      serviceDescription: editServiceDescription,
+      amount: Number(editAmount),
+      gstAmount: Number(editGstAmount),
+      pendingAmount: Number(editAmount) - selectedPayment.paidAmount,
+      bankName: editBankName,
+      bankAccNo: editBankAccNo,
+      bankIfsc: editBankIfsc,
+      bankUpi: editBankUpi
+    };
+    onEditPayment(updated);
+    setSelectedPayment(updated);
+    setIsSavedMessageVisible(true);
+    setTimeout(() => setIsSavedMessageVisible(false), 3000);
+  };
+
   // My expenses item form states
   const [cashType, setCashType] = useState<'Income' | 'Expense'>('Expense');
   const [cashSource, setCashSource] = useState('');
@@ -238,7 +310,7 @@ export default function FinanceManager({
     <div id="finance-management-module" className="space-y-6 max-w-7xl mx-auto">
       
       {/* 1. Header KPIs - Adjusted with requested custom Savings / remaining month 1st parameters */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl">
           <div className="flex justify-between items-center mb-1 text-slate-400 text-xs">
             <span>Total Invoiced</span>
@@ -402,7 +474,7 @@ export default function FinanceManager({
 
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setIsInvoicePreviewOpen(true)}
+                        onClick={() => openInvoicePreview(selectedPayment)}
                         className="px-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 flex items-center gap-1 cursor-pointer hover:bg-slate-850"
                       >
                         <FileText className="w-3.5 h-3.5" />
@@ -894,96 +966,345 @@ export default function FinanceManager({
 
       {/* Printable Invoice PDF overlay mock sheet */}
       {isInvoicePreviewOpen && selectedPayment && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-350 rounded-xl max-w-2xl w-full text-slate-900 p-8 shadow-2xl relative font-sans">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-6xl w-full h-[90vh] text-slate-100 shadow-2xl relative font-sans flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             
-            <button 
-              onClick={() => setIsInvoicePreviewOpen(false)} 
-              className="absolute right-4 top-4 p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-full cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            {/* PDF Header logo and invoice ID */}
-            <div className="flex justify-between items-start pb-6 border-b border-slate-200">
-              <div>
-                <span className="text-xs uppercase text-slate-400 font-mono tracking-wider block">official invoice receipt</span>
-                <h1 className="text-xl font-bold tracking-tight text-slate-900">GrowInvicta Agency Ltd</h1>
-                <p className="text-[11px] text-slate-500">TechHub Park Sector 62, Noida, India</p>
-                <p className="text-[11px] text-slate-500 font-mono">GSTIN: 09AAACA1234F1ZP</p>
-              </div>
-              <div className="text-right">
-                <h2 className="text-lg font-mono font-bold text-slate-800">{selectedPayment.invoiceNumber}</h2>
-                <p className="text-xs text-slate-500">Date: {new Date().toISOString().split('T')[0]}</p>
-                <p className="text-xs text-slate-500">Due: {selectedPayment.dueDate}</p>
-              </div>
-            </div>
-
-            {/* Bill To */}
-            <div className="py-6 grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <span className="text-slate-400 uppercase font-mono block">client bill to:</span>
-                <strong className="text-slate-900 text-sm block mt-1">{selectedPayment.clientName}</strong>
-                <p className="text-slate-500 mt-0.5">Corporate business customer</p>
-              </div>
-              <div className="text-right">
-                <span className="text-slate-400 uppercase font-mono block">payment parameters:</span>
-                <strong className="text-slate-900 block mt-1">{selectedPayment.mode}</strong>
-                <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-indigo-600 font-bold border border-indigo-200 inline-block mt-1">
-                  {selectedPayment.status.toUpperCase()}
-                </span>
-              </div>
-            </div>
-
-            {/* Simple invoice lines table */}
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-50 text-slate-500 uppercase font-mono border-b border-slate-200">
-                  <tr>
-                    <th className="p-3">line specifications</th>
-                    <th className="p-3 text-right">Tax scope</th>
-                    <th className="p-3 text-right">Amount line</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 text-slate-700">
-                  <tr>
-                    <td className="p-3">
-                      <strong>Agency Custom Campaign Development</strong>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Custom layout templates, SEO tags and database reconciliation.</p>
-                    </td>
-                    <td className="p-3 text-right font-mono">
-                      {selectedPayment.gstAmount > 0 ? "18% Indian Service GST" : "Exempt / No Tax"}
-                    </td>
-                    <td className="p-3 text-right font-sans font-medium">₹{selectedPayment.amount.toLocaleString('en-IN')}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* Invoice reconciliation totals */}
-            <div className="py-6 font-mono text-xs space-y-2 max-w-sm ml-auto">
-              <div className="grid grid-cols-2 gap-2 text-slate-500">
-                <span>Subtotal amount</span>
-                <span className="text-right text-slate-900">₹{selectedPayment.amount.toLocaleString('en-IN')}</span>
-              </div>
-              {selectedPayment.gstAmount > 0 && (
-                <div className="grid grid-cols-2 gap-2 text-slate-500">
-                  <span>18% GST Service Tax</span>
-                  <span className="text-right text-slate-900">₹{selectedPayment.gstAmount.toLocaleString('en-IN')}</span>
+            {/* Header Control Bar */}
+            <div className="bg-slate-950 px-6 py-4 border-b border-slate-850 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-indigo-400 animate-pulse" />
+                <div>
+                  <h2 className="text-sm font-bold font-mono text-white">Interactive Invoice Customizer</h2>
+                  <p className="text-[10px] text-slate-400 font-mono">Tailor client parameters, service deliverables, and logos in real-time</p>
                 </div>
-              )}
-              <div className="grid grid-cols-2 gap-2 text-sm text-slate-900 font-bold pt-2 border-t border-slate-200">
-                <span>Total invoice bill</span>
-                <span className="text-right">₹{(selectedPayment.amount + selectedPayment.gstAmount).toLocaleString('en-IN')}</span>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs text-emerald-600 font-semibold pt-1 border-t border-slate-100">
-                <span>Paid amount (INR)</span>
-                <span className="text-right">₹{selectedPayment.paidAmount.toLocaleString('en-IN')}</span>
+              
+              <div className="flex items-center gap-3">
+                {isSavedMessageVisible && (
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1 animate-bounce">
+                    <CheckSquare className="w-3.5 h-3.5" /> Changes saved successfully!
+                  </span>
+                )}
+                <button
+                  onClick={handleSaveEditedInvoice}
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold font-mono cursor-pointer transition-all flex items-center gap-1.5 shadow-md hover:shadow-indigo-500/10"
+                >
+                  <RefreshCcw className="w-3.5 h-3.5" /> Save Invoice Details
+                </button>
+                <button 
+                  onClick={() => setIsInvoicePreviewOpen(false)} 
+                  className="p-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-lg cursor-pointer transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
-            <div className="pt-6 border-t border-slate-200 text-center text-[10px] text-slate-400 font-mono">
-              Thank you for trusting GrowInvicta Agency with your enterprise builds.
+            {/* Main Workspace Workspace */}
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+              
+              {/* Left Panel: Invoice Editor Fields */}
+              <div className="w-full md:w-5/12 border-r border-slate-850 p-5 overflow-y-auto space-y-4 bg-slate-950/30">
+                <span className="text-[10px] uppercase text-indigo-400 font-mono font-bold tracking-wider block">Customization parameters</span>
+                
+                {/* Logo & Identity */}
+                <div className="space-y-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                  <h4 className="text-[11px] font-mono font-semibold text-slate-300">1. Issuer Branding Details</h4>
+                  <div>
+                    <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Company logo text</label>
+                    <input 
+                      type="text" 
+                      value={editLogoText} 
+                      onChange={(e) => setEditLogoText(e.target.value)}
+                      placeholder="e.g. GrowInvicta Agency Ltd"
+                      className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Logo image URL (optional)</label>
+                    <input 
+                      type="text" 
+                      value={editLogoUrl} 
+                      onChange={(e) => setEditLogoUrl(e.target.value)}
+                      placeholder="e.g. https://example.com/logo.png"
+                      className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Issuer name</label>
+                      <input 
+                        type="text" 
+                        value={editOurName} 
+                        onChange={(e) => setEditOurName(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Invoice number</label>
+                      <input 
+                        type="text" 
+                        value={editInvoiceNumber} 
+                        onChange={(e) => setEditInvoiceNumber(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Issuer phone</label>
+                      <input 
+                        type="text" 
+                        value={editOurPhone} 
+                        onChange={(e) => setEditOurPhone(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Issuer email</label>
+                      <input 
+                        type="text" 
+                        value={editOurEmail} 
+                        onChange={(e) => setEditOurEmail(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recipient Details */}
+                <div className="space-y-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                  <h4 className="text-[11px] font-mono font-semibold text-slate-300">2. Customer Bill To</h4>
+                  <div>
+                    <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Client / Company Name</label>
+                    <input 
+                      type="text" 
+                      value={editClientName} 
+                      onChange={(e) => setEditClientName(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Client phone</label>
+                      <input 
+                        type="text" 
+                        value={editClientPhone} 
+                        onChange={(e) => setEditClientPhone(e.target.value)}
+                        placeholder="+91..."
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Client email</label>
+                      <input 
+                        type="text" 
+                        value={editClientEmail} 
+                        onChange={(e) => setEditClientEmail(e.target.value)}
+                        placeholder="client@mail.com"
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Service details and pricing */}
+                <div className="space-y-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                  <h4 className="text-[11px] font-mono font-semibold text-slate-300">3. Line Specifications & pricing</h4>
+                  <div>
+                    <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Service line title</label>
+                    <input 
+                      type="text" 
+                      value={editServiceDetails} 
+                      onChange={(e) => setEditServiceDetails(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Service description summary</label>
+                    <textarea 
+                      value={editServiceDescription} 
+                      onChange={(e) => setEditServiceDescription(e.target.value)}
+                      rows={2}
+                      className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500 resize-none"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Base amount (INR)</label>
+                      <input 
+                        type="number" 
+                        value={editAmount} 
+                        onChange={(e) => setEditAmount(Number(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">GST Tax amount (INR)</label>
+                      <input 
+                        type="number" 
+                        value={editGstAmount} 
+                        onChange={(e) => setEditGstAmount(Number(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bank details */}
+                <div className="space-y-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800 pb-4">
+                  <h4 className="text-[11px] font-mono font-semibold text-slate-300">4. Settlement & Bank Details</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Bank Name</label>
+                      <input 
+                        type="text" 
+                        value={editBankName} 
+                        onChange={(e) => setEditBankName(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">UPI ID handle</label>
+                      <input 
+                        type="text" 
+                        value={editBankUpi} 
+                        onChange={(e) => setEditBankUpi(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">Account number</label>
+                      <input 
+                        type="text" 
+                        value={editBankAccNo} 
+                        onChange={(e) => setEditBankAccNo(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9.5px] uppercase font-mono text-slate-400 block mb-1">IFSC code</label>
+                      <input 
+                        type="text" 
+                        value={editBankIfsc} 
+                        onChange={(e) => setEditBankIfsc(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-850 rounded p-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Right Panel: Live PDF Sheet Preview */}
+              <div className="flex-1 p-8 overflow-y-auto bg-slate-100 flex items-start justify-center">
+                <div className="bg-white border border-slate-300 rounded-xl w-full max-w-2xl text-slate-900 p-8 shadow-md relative font-sans">
+                  
+                  {/* PDF Header logo and invoice ID */}
+                  <div className="flex justify-between items-start pb-6 border-b border-slate-200">
+                    <div>
+                      <span className="text-[10px] uppercase text-slate-400 font-mono tracking-wider block">official invoice receipt</span>
+                      {editLogoUrl ? (
+                        <img src={editLogoUrl} alt="Logo" referrerPolicy="no-referrer" className="h-10 max-w-[150px] object-contain mb-1" />
+                      ) : (
+                        <h1 className="text-lg font-bold tracking-tight text-slate-900 font-sans">{editOurName}</h1>
+                      )}
+                      <p className="text-[10px] text-slate-500 mt-0.5">Primary Business Developer & Contractor</p>
+                      {editOurEmail && <p className="text-[9.5px] text-slate-400 font-mono">Email: {editOurEmail}</p>}
+                      {editOurPhone && <p className="text-[9.5px] text-slate-400 font-mono">Phone: {editOurPhone}</p>}
+                    </div>
+                    <div className="text-right">
+                      <h2 className="text-base font-mono font-bold text-slate-800">{editInvoiceNumber}</h2>
+                      <p className="text-[10.5px] text-slate-500">Date: {new Date().toISOString().split('T')[0]}</p>
+                      <p className="text-[10.5px] text-slate-500">Due: {selectedPayment.dueDate}</p>
+                    </div>
+                  </div>
+
+                  {/* Bill To */}
+                  <div className="py-6 grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <span className="text-slate-400 uppercase font-mono block">client bill to:</span>
+                      <strong className="text-slate-900 text-sm block mt-1">{editClientName}</strong>
+                      <p className="text-slate-500 mt-0.5">Corporate business customer</p>
+                      {editClientEmail && <p className="text-[10px] text-slate-400 font-mono">Email: {editClientEmail}</p>}
+                      {editClientPhone && <p className="text-[10px] text-slate-400 font-mono">Phone: {editClientPhone}</p>}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 uppercase font-mono block">payment parameters:</span>
+                      <strong className="text-slate-900 block mt-1">{selectedPayment.mode}</strong>
+                      <span className="px-2 py-0.5 bg-indigo-50 rounded text-[10px] text-indigo-600 font-bold border border-indigo-100 inline-block mt-1">
+                        {selectedPayment.status.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Simple invoice lines table */}
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-50 text-slate-500 uppercase font-mono border-b border-slate-200">
+                        <tr>
+                          <th className="p-3">line specifications</th>
+                          <th className="p-3 text-right">Tax scope</th>
+                          <th className="p-3 text-right">Amount line</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 text-slate-700">
+                        <tr>
+                          <td className="p-3">
+                            <strong className="text-slate-900 block">{editServiceDetails}</strong>
+                            <p className="text-[10px] text-slate-400 mt-0.5 whitespace-pre-wrap">{editServiceDescription}</p>
+                          </td>
+                          <td className="p-3 text-right font-mono text-[11px]">
+                            {editGstAmount > 0 ? "18% Indian Service GST" : "Exempt / No Tax"}
+                          </td>
+                          <td className="p-3 text-right font-sans font-medium text-slate-900">₹{editAmount.toLocaleString('en-IN')}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Invoice reconciliation totals */}
+                  <div className="py-6 font-mono text-xs space-y-2 max-w-sm ml-auto">
+                    <div className="grid grid-cols-2 gap-2 text-slate-500">
+                      <span>Subtotal amount</span>
+                      <span className="text-right text-slate-900 font-sans">₹{editAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    {editGstAmount > 0 && (
+                      <div className="grid grid-cols-2 gap-2 text-slate-500">
+                        <span>18% GST Service Tax</span>
+                        <span className="text-right text-slate-900 font-sans">₹{editGstAmount.toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2 text-sm text-slate-900 font-bold pt-2 border-t border-slate-200">
+                      <span>Total invoice bill</span>
+                      <span className="text-right font-sans">₹{(editAmount + editGstAmount).toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[11.5px] text-emerald-600 font-semibold pt-1 border-t border-slate-100">
+                      <span>Paid amount (INR)</span>
+                      <span className="text-right font-sans">₹{selectedPayment.paidAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  {/* Settlement / Bank Details parameters */}
+                  <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 text-[11px]">
+                    <span className="text-[9px] uppercase text-slate-400 font-mono tracking-wider block mb-1">remittance details</span>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600 font-mono">
+                      <div>Bank Name: <strong className="text-slate-800">{editBankName}</strong></div>
+                      <div>UPI handle: <strong className="text-slate-800">{editBankUpi}</strong></div>
+                      <div>Account No: <strong className="text-slate-800">{editBankAccNo}</strong></div>
+                      <div>IFSC Code: <strong className="text-slate-800">{editBankIfsc}</strong></div>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 mt-6 border-t border-slate-200 text-center text-[10px] text-slate-400 font-mono">
+                    Thank you for trusting {editOurName} with your enterprise builds.
+                  </div>
+
+                </div>
+              </div>
+
             </div>
 
           </div>

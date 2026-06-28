@@ -15,6 +15,7 @@ interface AuthContextType {
   session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
+  providerToken: string | null;
   signUp: (email: string, password: string, fullName: string, companyName: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: (scopes?: string) => Promise<{ error: Error | null }>;
@@ -32,6 +33,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [providerToken, setProviderToken] = useState<string | null>(() => {
+    return sessionStorage.getItem('google_provider_token');
+  });
 
   // Sync profile from 'users' table
   const fetchProfile = async (userId: string, fallbackEmail?: string, currentUserObj?: User | null) => {
@@ -89,11 +93,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    // Helper to extract provider_token from hash if present
+    const extractHashToken = () => {
+      try {
+        const hash = window.location.hash;
+        if (hash) {
+          const params = new URLSearchParams(hash.substring(1));
+          const pToken = params.get('provider_token');
+          if (pToken) {
+            setProviderToken(pToken);
+            sessionStorage.setItem('google_provider_token', pToken);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not extract provider_token from URL hash:', err);
+      }
+    };
+
+    extractHashToken();
+
     // 1. Get initial session
     supabase.auth.getSession().then(({ data: { session: initSession } }) => {
       setSession(initSession);
       const currentUser = initSession?.user ?? null;
       setUser(currentUser);
+      
+      if (initSession?.provider_token) {
+        setProviderToken(initSession.provider_token);
+        sessionStorage.setItem('google_provider_token', initSession.provider_token);
+      }
       
       if (currentUser) {
         fetchProfile(currentUser.id, currentUser.email, currentUser);
@@ -108,6 +136,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(currentSession);
         const currentUser = currentSession?.user ?? null;
         setUser(currentUser);
+
+        if (currentSession?.provider_token) {
+          setProviderToken(currentSession.provider_token);
+          sessionStorage.setItem('google_provider_token', currentSession.provider_token);
+        } else if (event === 'SIGNED_OUT') {
+          setProviderToken(null);
+          sessionStorage.removeItem('google_provider_token');
+        }
 
         if (currentUser) {
           await fetchProfile(currentUser.id, currentUser.email, currentUser);
@@ -210,6 +246,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setSession(null);
       setProfile(null);
+      setProviderToken(null);
+      sessionStorage.removeItem('google_provider_token');
     }
     return { error: null };
   };
@@ -292,6 +330,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         profile,
         loading,
+        providerToken,
         signUp,
         signIn,
         signInWithGoogle,

@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Globe, ExternalLink, AlertTriangle, Calendar, Plus, Search, 
   Edit, Trash2, Filter, IndianRupee, Info, CalendarClock, Sparkles, 
-  User, Server, CheckCircle2, X, Activity, CreditCard
+  User, Server, CheckCircle2, X, Activity, CreditCard, Upload, FileSpreadsheet, AlertCircle, Check, FileText
 } from 'lucide-react';
 import { Website, Client } from '../types';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
@@ -58,6 +58,286 @@ export default function WebsitesManager({
   const [formNotes, setFormNotes] = useState('');
   const [formClientId, setFormClientId] = useState('');
 
+  // Smart CSV Import States
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [importFileName, setImportFileName] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccessCount, setImportSuccessCount] = useState<number | null>(null);
+  const [previewWebsites, setPreviewWebsites] = useState<any[]>([]);
+  const [mappedColumns, setMappedColumns] = useState<Record<string, string>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // CSV parsing logic that accommodates custom delimiters & escapes
+  const parseCSV = (text: string): string[][] => {
+    const lines: string[][] = [];
+    let row: string[] = [];
+    let inQuotes = false;
+    let currentValue = '';
+
+    const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const firstLine = cleanText.split('\n')[0] || '';
+    const delimiter = firstLine.includes('\t') ? '\t' : (firstLine.includes(';') ? ';' : ',');
+
+    for (let i = 0; i < cleanText.length; i++) {
+      const char = cleanText[i];
+      const nextChar = cleanText[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          currentValue += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === delimiter && !inQuotes) {
+        row.push(currentValue.trim());
+        currentValue = '';
+      } else if (char === '\n' && !inQuotes) {
+        row.push(currentValue.trim());
+        lines.push(row);
+        row = [];
+        currentValue = '';
+      } else {
+        currentValue += char;
+      }
+    }
+
+    if (currentValue || row.length > 0) {
+      row.push(currentValue.trim());
+      lines.push(row);
+    }
+
+    return lines.filter(r => r.length > 0 && r.some(val => val !== ''));
+  };
+
+  // Heuristically find best column matching with various terms
+  const findBestColumnIndex = (headers: string[], matchers: string[]): number => {
+    for (let i = 0; i < headers.length; i++) {
+      const h = headers[i].toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (matchers.some(m => {
+        const cleanedM = m.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return h === cleanedM || h.includes(cleanedM);
+      })) {
+        return i;
+      }
+    }
+    for (let i = 0; i < headers.length; i++) {
+      const h = headers[i].toLowerCase();
+      if (matchers.some(m => h.includes(m.toLowerCase()))) {
+        return i;
+      }
+    }
+    return -1;
+  };
+
+  // Read the CSV and process the fields using loose mapping heuristics
+  const processImportCSV = (rawText: string) => {
+    try {
+      setImportError(null);
+      setImportSuccessCount(null);
+      const rows = parseCSV(rawText);
+      if (rows.length < 2) {
+        setImportError("The CSV file appears empty or lacks a header row.");
+        return;
+      }
+
+      const headers = rows[0];
+      const dataRows = rows.slice(1);
+
+      const matchersMap: Record<string, string[]> = {
+        name: ['name', 'title', 'site', 'website', 'app', 'project', 'label', 'websitename', 'identity'],
+        url: ['url', 'link', 'domain', 'address', 'href', 'siteurl', 'websiteurl', 'hosturl'],
+        hostingProvider: ['host', 'hosting', 'provider', 'server', 'cloud', 'hostingprovider', 'hoster'],
+        hostingPrice: ['hostingprice', 'hostprice', 'hostingcost', 'hostingfee', 'hostingamount', 'servercost', 'serverprice'],
+        hostingBillDate: ['hostingbill', 'hostingdate', 'hostingdue', 'hostdate', 'hostbill', 'hostbilldate', 'hostdue', 'hostingrenewal'],
+        domainRegistrar: ['registrar', 'domainregistrar', 'godaddy', 'namecheap', 'domainprovider', 'registry'],
+        domainPrice: ['domainprice', 'domaincost', 'domainfee', 'domainamount', 'regprice', 'registrarprice', 'domainrenewalcost'],
+        domainBillDate: ['domainbill', 'domaindate', 'domaindue', 'registrardate', 'domainbilldate', 'domaindue', 'domainrenewal'],
+        notes: ['note', 'notes', 'desc', 'description', 'comment', 'info', 'credential', 'credentials', 'detail', 'details', 'about', 'remarks'],
+        status: ['status', 'active', 'state', 'condition'],
+        clientName: ['client', 'owner', 'customer', 'contact', 'user', 'clientname', 'clientname', 'company', 'firm']
+      };
+
+      const fieldToColumnIndex: Record<string, number> = {};
+      const actualMappings: Record<string, string> = {};
+
+      Object.entries(matchersMap).forEach(([field, matchers]) => {
+        const idx = findBestColumnIndex(headers, matchers);
+        fieldToColumnIndex[field] = idx;
+        if (idx !== -1) {
+          actualMappings[field] = headers[idx];
+        }
+      });
+
+      // We need at least 'name' or 'url' to be mapped to create a website entry!
+      if (fieldToColumnIndex['name'] === -1 && fieldToColumnIndex['url'] === -1) {
+        setImportError("Could not automatically identify 'name' or 'url' columns in your file. Please ensure your CSV has column headers.");
+        return;
+      }
+
+      setMappedColumns(actualMappings);
+
+      const items: any[] = [];
+      dataRows.forEach((row, idx) => {
+        const getValue = (field: string, defaultValue: any = '') => {
+          const colIdx = fieldToColumnIndex[field];
+          if (colIdx !== undefined && colIdx !== -1 && row[colIdx] !== undefined) {
+            return row[colIdx].trim();
+          }
+          return defaultValue;
+        };
+
+        let rawName = getValue('name');
+        let rawUrl = getValue('url');
+
+        // Fallback names/urls
+        if (!rawName && rawUrl) {
+          try {
+            const cleanUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+            const urlObj = new URL(cleanUrl);
+            rawName = urlObj.hostname.replace('www.', '');
+          } catch {
+            rawName = rawUrl;
+          }
+        }
+        if (!rawUrl && rawName) {
+          rawUrl = `https://${rawName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`;
+        }
+
+        if (!rawName) return;
+
+        const rawHostingProvider = getValue('hostingProvider', 'Hostinger Share Node');
+        const rawHostingPrice = parseFloat(getValue('hostingPrice', '0').replace(/[^0-9.]/g, '')) || 0;
+        const rawHostingBillDate = getValue('hostingBillDate', '2027-06-25');
+        const rawDomainRegistrar = getValue('domainRegistrar', 'Namecheap');
+        const rawDomainPrice = parseFloat(getValue('domainPrice', '0').replace(/[^0-9.]/g, '')) || 0;
+        const rawDomainBillDate = getValue('domainBillDate', '2027-06-25');
+        const rawNotes = getValue('notes', '');
+        const clientNameField = getValue('clientName', '');
+
+        let matchedClientId = '';
+        if (clientNameField) {
+          const matchedClient = clients.find(c => 
+            c.name.toLowerCase().includes(clientNameField.toLowerCase()) || 
+            c.company.toLowerCase().includes(clientNameField.toLowerCase())
+          );
+          if (matchedClient) {
+            matchedClientId = matchedClient.id;
+          }
+        }
+
+        let parsedStatus: Website['status'] = 'Active';
+        const rawStatus = getValue('status', 'Active').toLowerCase();
+        if (rawStatus.includes('maintenance')) {
+          parsedStatus = 'Under Maintenance';
+        } else if (rawStatus.includes('inactive') || rawStatus === 'off') {
+          parsedStatus = 'Inactive';
+        } else if (rawStatus.includes('suspended')) {
+          parsedStatus = 'Suspended';
+        }
+
+        items.push({
+          id: `web_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
+          name: rawName,
+          url: rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`,
+          hostingProvider: rawHostingProvider,
+          hostingPrice: isNaN(rawHostingPrice) ? 0 : rawHostingPrice,
+          hostingBillDate: rawHostingBillDate,
+          domainRegistrar: rawDomainRegistrar,
+          domainPrice: isNaN(rawDomainPrice) ? 0 : rawDomainPrice,
+          domainBillDate: rawDomainBillDate,
+          status: parsedStatus,
+          notes: rawNotes,
+          clientId: matchedClientId || undefined,
+          clientNameField: clientNameField || undefined
+        });
+      });
+
+      if (items.length === 0) {
+        setImportError("No valid rows containing website data were found in the file.");
+      } else {
+        setPreviewWebsites(items);
+      }
+    } catch (e: any) {
+      setImportError(`Failed to parse CSV file: ${e.message}`);
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      setImportFileName(file.name);
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        processImportCSV(text);
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setImportFileName(file.name);
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        processImportCSV(text);
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const handleExecuteImport = () => {
+    if (previewWebsites.length === 0) return;
+
+    previewWebsites.forEach(web => {
+      // Create clean website item matching the exact properties
+      const cleanedWeb: Website = {
+        id: web.id,
+        name: web.name,
+        url: web.url,
+        hostingProvider: web.hostingProvider,
+        hostingPrice: web.hostingPrice,
+        hostingBillDate: web.hostingBillDate,
+        domainRegistrar: web.domainRegistrar,
+        domainPrice: web.domainPrice,
+        domainBillDate: web.domainBillDate,
+        status: web.status,
+        notes: web.notes,
+        clientId: web.clientId
+      };
+      onAddWebsite(cleanedWeb);
+    });
+
+    onAuditLog('Websites Smart Imported', `Successfully imported ${previewWebsites.length} website monitors from CSV file.`);
+    setImportSuccessCount(previewWebsites.length);
+    setPreviewWebsites([]);
+    setImportFileName('');
+    setTimeout(() => {
+      setShowImportPanel(false);
+      setImportSuccessCount(null);
+    }, 4000);
+  };
+
   // Helper calculation for due days remainder relative to anchor date
   const getDaysDiff = (dateStr: string) => {
     if (!dateStr) return 999;
@@ -72,7 +352,7 @@ export default function WebsitesManager({
     const domainDiff = getDaysDiff(domainDate);
 
     if (hostDiff < 0 || domainDiff < 0) return 'Overdue';
-    if (hostDiff <= 7 || domainDiff <= 7) return 'Urgent';
+    if (hostDiff <= 10 || domainDiff <= 10) return 'Urgent';
     if (hostDiff <= 30 || domainDiff <= 30) return 'Upcoming';
     return 'Normal';
   };
@@ -198,27 +478,31 @@ export default function WebsitesManager({
   // Metrics calculations
   const totalCount = websites.length;
   const activeCount = websites.filter(w => w.status === 'Active').length;
+  const inactiveCount = websites.filter(w => w.status === 'Inactive').length;
   const maintenanceCount = websites.filter(w => w.status === 'Under Maintenance').length;
   const suspendedCount = websites.filter(w => w.status === 'Suspended').length;
 
-  const expiredHostingCount = websites.filter(w => getDaysDiff(w.hostingBillDate) < 0).length;
-  const expiredDomainCount = websites.filter(w => getDaysDiff(w.domainBillDate) < 0).length;
-  const totalOverdueBills = websites.filter(w => getDaysDiff(w.hostingBillDate) < 0 || getDaysDiff(w.domainBillDate) < 0).length;
+  const expiredHostingCount = websites.filter(w => w.status === 'Active' && getDaysDiff(w.hostingBillDate) < 0).length;
+  const expiredDomainCount = websites.filter(w => w.status === 'Active' && getDaysDiff(w.domainBillDate) < 0).length;
+  const totalOverdueBills = websites.filter(w => w.status === 'Active' && (getDaysDiff(w.hostingBillDate) < 0 || getDaysDiff(w.domainBillDate) < 0)).length;
 
   const expiringHostingSoon = websites.filter(w => {
+    if (w.status !== 'Active') return false;
     const diff = getDaysDiff(w.hostingBillDate);
-    return diff >= 0 && diff <= 7;
+    return diff >= 0 && diff <= 10 && diff % 2 === 0;
   }).length;
   
   const expiringDomainSoon = websites.filter(w => {
+    if (w.status !== 'Active') return false;
     const diff = getDaysDiff(w.domainBillDate);
-    return diff >= 0 && diff <= 7;
+    return diff >= 0 && diff <= 10 && diff % 2 === 0;
   }).length;
 
   const totalUrgentCount = websites.filter(w => {
+    if (w.status !== 'Active') return false;
     const hDiff = getDaysDiff(w.hostingBillDate);
     const dDiff = getDaysDiff(w.domainBillDate);
-    return (hDiff >= 0 && hDiff <= 7) || (dDiff >= 0 && dDiff <= 7);
+    return (hDiff >= 0 && hDiff <= 10 && hDiff % 2 === 0) || (dDiff >= 0 && dDiff <= 10 && dDiff % 2 === 0);
   }).length;
 
   // Monthly average spending
@@ -227,7 +511,9 @@ export default function WebsitesManager({
   const estimatedMonthlyRenewal = Math.round((totalAnnualHosting + totalAnnualDomain) / 12);
 
   // List of urgent active alerts for overhead banner notification panel
-  const billingAlerts = websites.flatMap(w => {
+  const billingAlerts = websites
+    .filter(w => w.status === 'Active')
+    .flatMap(w => {
     const alertsList: Array<{
       id: string;
       web: Website;
@@ -239,7 +525,7 @@ export default function WebsitesManager({
     }> = [];
 
     const hostDiff = getDaysDiff(w.hostingBillDate);
-    if (hostDiff <= 10) {
+    if (hostDiff < 0 || (hostDiff <= 10 && hostDiff % 2 === 0)) {
       alertsList.push({
         id: `${w.id}_host`,
         web: w,
@@ -252,7 +538,7 @@ export default function WebsitesManager({
     }
 
     const domDiff = getDaysDiff(w.domainBillDate);
-    if (domDiff <= 10) {
+    if (domDiff < 0 || (domDiff <= 10 && domDiff % 2 === 0)) {
       alertsList.push({
         id: `${w.id}_domain`,
         web: w,
@@ -311,17 +597,237 @@ export default function WebsitesManager({
           </p>
         </div>
         
-        <button
-          onClick={() => {
-            resetForm();
-            setShowAddModal(true);
-          }}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-2 cursor-pointer transition-colors shadow-lg shadow-indigo-900/20"
-        >
-          <Plus className="w-4 h-4" />
-          Add Managed Website
-        </button>
+        <div className="flex flex-wrap gap-2.5 w-full md:w-auto">
+          <button
+            onClick={() => {
+              setShowImportPanel(!showImportPanel);
+              setImportError(null);
+              setPreviewWebsites([]);
+              setImportFileName('');
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all border ${
+              showImportPanel 
+                ? 'bg-indigo-950/40 border-indigo-500/40 text-indigo-400 shadow-md shadow-indigo-950/20' 
+                : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-300'
+            }`}
+          >
+            <Upload className="w-4 h-4" />
+            Smart CSV Import
+          </button>
+
+          <button
+            onClick={() => {
+              resetForm();
+              setShowAddModal(true);
+            }}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-2 cursor-pointer transition-colors shadow-lg shadow-indigo-900/20 ml-auto md:ml-0"
+          >
+            <Plus className="w-4 h-4" />
+            Add Managed Website
+          </button>
+        </div>
       </div>
+
+      {/* SMART CSV IMPORT CENTER PANEL */}
+      {showImportPanel && (
+        <div className="bg-slate-900 border border-indigo-500/10 rounded-2xl p-5 shadow-xl space-y-5 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-indigo-400" />
+                Smart CSV Document Import Center
+              </h2>
+              <p className="text-[11px] text-slate-400 mt-1 max-w-2xl">
+                Upload any website listing CSV. Our intelligence engine analyzes your columns (such as site name, link, hoster, server fee, domain registrar) and automatically maps them. 
+                <span className="text-indigo-400 font-semibold ml-1">No specific column order or naming is required!</span>
+              </p>
+            </div>
+            <button 
+              onClick={() => setShowImportPanel(false)}
+              className="p-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* DRAG AND DROP ZONE */}
+          <div 
+            onDragEnter={handleDrag}
+            onDragOver={handleDrag}
+            onDragLeave={handleDrag}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-2.5 ${
+              dragActive 
+                ? 'border-indigo-500 bg-indigo-950/10 scale-[0.99]' 
+                : 'border-slate-800 bg-slate-950/40 hover:border-slate-700 hover:bg-slate-950/60'
+            }`}
+          >
+            <input 
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <div className="p-3 bg-slate-900/80 rounded-xl text-indigo-400 border border-slate-800">
+              <Upload className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-200">
+                {importFileName ? `Selected: ${importFileName}` : 'Drag & drop your CSV file here, or click to browse'}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-1 font-mono">
+                Supports standard comma-separated, semicolon-separated, or tab-delimited sheets (.csv, .txt)
+              </p>
+            </div>
+          </div>
+
+          {/* STATUS NOTIFICATIONS */}
+          {importError && (
+            <div className="p-3 bg-rose-950/30 border border-rose-500/20 text-rose-200 rounded-xl text-xs flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Parsing Error:</span> {importError}
+              </div>
+            </div>
+          )}
+
+          {importSuccessCount !== null && (
+            <div className="p-3 bg-emerald-950/30 border border-emerald-500/20 text-emerald-200 rounded-xl text-xs flex items-center gap-2.5 animate-in fade-in">
+              <CheckCircle2 className="w-4.5 h-4.5 text-emerald-400 shrink-0" />
+              <div>
+                <span className="font-bold">Success!</span> Registered <span className="font-bold text-white font-mono">{importSuccessCount}</span> website monitors into your infrastructure hub. Sync logs updated.
+              </div>
+            </div>
+          )}
+
+          {/* MATCHING RESULTS PREVIEW */}
+          {previewWebsites.length > 0 && (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              {/* Detected Column Mapping Map */}
+              <div className="p-4 bg-slate-950 border border-slate-850 rounded-xl space-y-2.5">
+                <div className="flex justify-between items-center border-b border-slate-900 pb-2">
+                  <span className="text-[10.5px] font-bold font-mono text-indigo-400 uppercase tracking-wider">
+                    Auto-Detected Column Mappings
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-500/10">
+                    Smart Match Ready
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-[10px]">
+                  {Object.entries(mappedColumns).map(([field, rawHeader]) => {
+                    const labelMap: Record<string, string> = {
+                      name: 'Website Name',
+                      url: 'Website URL',
+                      hostingProvider: 'Hosting Provider',
+                      hostingPrice: 'Hosting Price',
+                      hostingBillDate: 'Hosting Bill Date',
+                      domainRegistrar: 'Domain Registrar',
+                      domainPrice: 'Domain Price',
+                      domainBillDate: 'Domain Bill Date',
+                      notes: 'Notes / Description',
+                      status: 'Status State',
+                      clientName: 'Client Lookup'
+                    };
+                    return (
+                      <div key={field} className="p-2 bg-slate-900 border border-slate-850 rounded-lg flex flex-col gap-0.5">
+                        <span className="text-slate-500 font-medium">{labelMap[field] || field}</span>
+                        <span className="text-slate-200 font-bold font-mono truncate">&ldquo;{rawHeader}&rdquo;</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Data Row Table Preview */}
+              <div className="border border-slate-850 rounded-xl overflow-hidden bg-slate-950">
+                <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-850 flex justify-between items-center">
+                  <span className="text-[10px] font-bold font-mono uppercase tracking-wider text-slate-300">
+                    Import Preview &mdash; Matches Detected ({previewWebsites.length} items)
+                  </span>
+                  <span className="text-[9.5px] text-slate-400 italic">
+                    Top rows shown. Clicking import will ingest all rows.
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto max-h-[250px] overflow-y-auto">
+                  <table className="w-full text-left text-[11px] font-sans border-collapse">
+                    <thead>
+                      <tr className="bg-slate-920 text-slate-400 border-b border-slate-850">
+                        <th className="p-2.5 font-bold">Name</th>
+                        <th className="p-2.5 font-bold">URL</th>
+                        <th className="p-2.5 font-bold">Hosting Provider</th>
+                        <th className="p-2.5 font-bold">Hosting Price</th>
+                        <th className="p-2.5 font-bold">Domain Registrar</th>
+                        <th className="p-2.5 font-bold">Domain Price</th>
+                        <th className="p-2.5 font-bold">Client Linkage</th>
+                        <th className="p-2.5 font-bold">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-900 font-mono">
+                      {previewWebsites.slice(0, 10).map((web, idx) => (
+                        <tr key={web.id || idx} className="hover:bg-slate-900/40 text-slate-300">
+                          <td className="p-2.5 font-semibold text-white">{web.name}</td>
+                          <td className="p-2.5 text-indigo-400 font-sans select-all">{web.url}</td>
+                          <td className="p-2.5 text-slate-400">{web.hostingProvider}</td>
+                          <td className="p-2.5 text-emerald-400">INR {web.hostingPrice}</td>
+                          <td className="p-2.5 text-slate-400">{web.domainRegistrar}</td>
+                          <td className="p-2.5 text-emerald-400">INR {web.domainPrice}</td>
+                          <td className="p-2.5 text-amber-400">
+                            {web.clientId ? (
+                              <span className="text-emerald-400 font-bold flex items-center gap-1 font-sans">
+                                <Check className="w-3 h-3" /> Attached
+                              </span>
+                            ) : web.clientNameField ? (
+                              <span className="text-slate-500 italic truncate block max-w-[100px]" title={web.clientNameField}>
+                                &ldquo;{web.clientNameField}&rdquo;
+                              </span>
+                            ) : (
+                              <span className="text-slate-600">-</span>
+                            )}
+                          </td>
+                          <td className="p-2.5">
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                              web.status === 'Active' 
+                                ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-500/10' 
+                                : web.status === 'Under Maintenance'
+                                ? 'bg-amber-950/50 text-amber-400 border border-amber-500/10'
+                                : 'bg-rose-950/50 text-rose-400 border border-rose-500/10'
+                            }`}>
+                              {web.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Confirm Action Bar */}
+              <div className="flex gap-2.5 pt-2 justify-end">
+                <button
+                  onClick={() => {
+                    setPreviewWebsites([]);
+                    setImportFileName('');
+                  }}
+                  className="px-4 py-2 bg-slate-950 border border-slate-800 hover:bg-slate-900 hover:border-slate-700 text-slate-400 hover:text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  Clear File
+                </button>
+                <button
+                  onClick={handleExecuteImport}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors shadow-lg shadow-indigo-900/30"
+                >
+                  <Check className="w-4 h-4" />
+                  Import {previewWebsites.length} Website Monitors
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* BENTO STATISTICS SUMMARY ROW */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -334,8 +840,10 @@ export default function WebsitesManager({
           <div>
             <span className="text-[10px] text-slate-500 uppercase font-mono tracking-wider font-bold">Monitored Domains</span>
             <div className="text-2xl font-black mt-0.5 font-mono">{totalCount}</div>
-            <div className="text-[10px] text-slate-400 mt-0.5 flex gap-1.5 font-mono">
-              <span className="text-emerald-400 font-bold">{activeCount} Up</span>
+            <div className="text-[10px] text-slate-400 mt-0.5 flex flex-wrap gap-x-1.5 gap-y-0.5 font-mono">
+              <span className="text-emerald-400 font-bold">{activeCount} Active</span>
+              <span>&bull;</span>
+              <span className="text-slate-400 font-bold">{inactiveCount} Inact</span>
               <span>&bull;</span>
               <span className="text-amber-400 font-bold">{minorCheck(maintenanceCount)} Maint</span>
               <span>&bull;</span>
@@ -512,7 +1020,7 @@ export default function WebsitesManager({
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-mono uppercase text-slate-500 font-bold">Status:</span>
             <div className="flex bg-slate-950 p-1 border border-slate-800 rounded-lg text-[10px]">
-              {['All', 'Active', 'Under Maintenance', 'Suspended'].map(opt => (
+              {['All', 'Active', 'Inactive', 'Under Maintenance', 'Suspended'].map(opt => (
                 <button
                   key={opt}
                   onClick={() => setStatusFilter(opt)}
@@ -568,6 +1076,8 @@ export default function WebsitesManager({
                       ? 'bg-emerald-400 shadow-md shadow-emerald-400/50 animate-pulse' 
                       : web.status === 'Under Maintenance' 
                       ? 'bg-amber-400' 
+                      : web.status === 'Inactive'
+                      ? 'bg-slate-500'
                       : 'bg-rose-400 animate-ping'
                   }`} />
                   <span className="text-[9.5px] font-mono font-bold uppercase text-slate-400">
@@ -896,6 +1406,7 @@ export default function WebsitesManager({
                       className="w-full bg-slate-950 border border-slate-800 p-2 rounded-lg text-slate-300 focus:outline-none focus:border-indigo-500 text-[11.5px]"
                     >
                       <option value="Active">Active / Online</option>
+                      <option value="Inactive">Inactive / Offline</option>
                       <option value="Under Maintenance">Under Maintenance</option>
                       <option value="Suspended">Suspended / Frozen</option>
                     </select>
@@ -1082,6 +1593,7 @@ export default function WebsitesManager({
                       className="w-full bg-slate-950 border border-slate-800 p-2 rounded-lg text-slate-300 focus:outline-none focus:border-indigo-500 text-[11.5px]"
                     >
                       <option value="Active">Active / Online</option>
+                      <option value="Inactive">Inactive / Offline</option>
                       <option value="Under Maintenance">Under Maintenance</option>
                       <option value="Suspended">Suspended / Frozen</option>
                     </select>

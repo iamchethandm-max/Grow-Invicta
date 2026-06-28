@@ -270,28 +270,30 @@ export default function LeadTracker({ leads, onAddLead, onEditLead, onDeleteLead
               {/* Status workflow stepping bars */}
               <div className="py-2">
                 <span className="text-[9.5px] font-mono text-slate-500 uppercase block mb-2">Deal Progression Pipeline</span>
-                <div className="grid grid-cols-7 gap-1 bg-slate-950 p-1.5 rounded-xl">
-                  {pipelineStatuses.map((step, idx) => {
-                    const activeIndex = pipelineStatuses.indexOf(selectedLead.status);
-                    const isPassed = pipelineStatuses.indexOf(step) <= activeIndex;
-                    const isWon = selectedLead.status === 'Won';
-                    
-                    return (
-                      <button
-                        key={step}
-                        onClick={() => handleQuickStatusChange(step)}
-                        className={`py-1 rounded text-[8px] font-mono font-bold uppercase transition-all tracking-tight ${
-                          step === selectedLead.status 
-                            ? isWon ? 'bg-emerald-500 text-white shadow-sm' : 'bg-indigo-600 text-white shadow-sm'
-                            : isPassed 
-                              ? isWon ? 'bg-emerald-950/40 text-emerald-400' : 'bg-indigo-950/40 text-indigo-400'
-                              : 'bg-slate-900 text-slate-500 hover:text-slate-300'
-                        }`}
-                      >
-                        {step.split(' ')[0]}
-                      </button>
-                    );
-                  })}
+                <div className="overflow-x-auto scrollbar-none">
+                  <div className="grid grid-cols-7 gap-1 bg-slate-950 p-1.5 rounded-xl min-w-[500px] md:min-w-0">
+                    {pipelineStatuses.map((step, idx) => {
+                      const activeIndex = pipelineStatuses.indexOf(selectedLead.status);
+                      const isPassed = pipelineStatuses.indexOf(step) <= activeIndex;
+                      const isWon = selectedLead.status === 'Won';
+                      
+                      return (
+                        <button
+                          key={step}
+                          onClick={() => handleQuickStatusChange(step)}
+                          className={`py-1 rounded text-[8px] font-mono font-bold uppercase transition-all tracking-tight ${
+                            step === selectedLead.status 
+                              ? isWon ? 'bg-emerald-500 text-white shadow-sm' : 'bg-indigo-600 text-white shadow-sm'
+                              : isPassed 
+                                ? isWon ? 'bg-emerald-950/40 text-emerald-400' : 'bg-indigo-950/40 text-indigo-400'
+                                : 'bg-slate-900 text-slate-500 hover:text-slate-300'
+                          }`}
+                        >
+                          {step.split(' ')[0]}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
