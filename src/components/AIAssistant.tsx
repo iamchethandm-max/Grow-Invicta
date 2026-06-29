@@ -379,17 +379,6 @@ export default function AIAssistant({
 
   return (
     <>
-      {/* Floating AI Bubble Trigger Button */}
-      <button
-        id="ai-floating-bubble"
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-40 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full p-4 shadow-xl hover:shadow-indigo-500/20 cursor-pointer border border-indigo-400 group transition-all duration-300 transform hover:scale-110 flex items-center gap-2"
-        title="Open GrowInvicta AI Assistant"
-      >
-        <Sparkles className="w-5 h-5 animate-pulse text-indigo-200" />
-        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 ease-out text-xs font-mono font-bold tracking-wider uppercase whitespace-nowrap">GrowAI Assistant</span>
-      </button>
-
       {/* Slide-out Chat Drawer Overlay */}
       {isOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex justify-end font-sans">
