@@ -94,6 +94,10 @@ export default function ClientsCRM({
     
     const matchesStatus = statusFilter === 'All' || c.status === statusFilter;
     return matchesSearch && matchesStatus;
+  }).sort((a, b) => {
+    const dateA = a.metrics?.workStartDate || a.createdAt || '';
+    const dateB = b.metrics?.workStartDate || b.createdAt || '';
+    return dateB.localeCompare(dateA);
   });
 
   const handleOpenAdd = () => {

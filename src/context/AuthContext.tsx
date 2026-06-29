@@ -44,6 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from('users')
         .select('*')
         .eq('id', userId)
+        .order('created_at', { ascending: false })
         .maybeSingle();
 
       if (error) {

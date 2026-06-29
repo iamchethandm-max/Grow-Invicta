@@ -12,6 +12,79 @@ interface DataImportProps {
   onImportWebsites: (newWebsites: Website[]) => void;
 }
 
+/**
+ * Smart date parser that handles multiple common date formats (including ordinals like "Jan 15th 2024",
+ * standard DD/MM/YYYY, and YYYY-MM-DD), and outputs standard YYYY-MM-DD string.
+ */
+export const parseDateToYYYYMMDD = (dateStr: string): string => {
+  if (!dateStr || !dateStr.trim()) {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  const cleaned = dateStr.trim().replace(/\s+/g, ' ');
+
+  // 1. Check YYYY-MM-DD or YYYY/MM/DD
+  const ymdMatch = cleaned.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (ymdMatch) {
+    const [, y, m, d] = ymdMatch;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  // 2. Check DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = cleaned.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dmyMatch) {
+    const [, d, m, y] = dmyMatch;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  // 3. Check for text month with ordinals, e.g. "Jan 15th 2024", "January 15th, 2024", "15th Jan 2024"
+  // Let's strip standard suffixes (st, nd, rd, th) on numbers
+  let simplified = cleaned.replace(/(\d+)(st|nd|rd|th)\b/gi, '$1');
+  // Remove commas
+  simplified = simplified.replace(/,/g, '');
+
+  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+  // Match month word, day number, year number (e.g. "Jan 15 2024")
+  const mdyMatch = simplified.match(/([a-zA-Z]+)\s+(\d{1,2})\s+(\d{4})/);
+  if (mdyMatch) {
+    const [, monthStr, dayStr, yearStr] = mdyMatch;
+    const mLower = monthStr.toLowerCase().slice(0, 3);
+    const mIdx = months.indexOf(mLower);
+    if (mIdx !== -1) {
+      const monthNum = String(mIdx + 1).padStart(2, '0');
+      const dayNum = dayStr.padStart(2, '0');
+      return `${yearStr}-${monthNum}-${dayNum}`;
+    }
+  }
+
+  // Match day number, month word, year number (e.g. "15 Jan 2024")
+  const dmyWordMatch = simplified.match(/(\d{1,2})\s+([a-zA-Z]+)\s+(\d{4})/);
+  if (dmyWordMatch) {
+    const [, dayStr, monthStr, yearStr] = dmyWordMatch;
+    const mLower = monthStr.toLowerCase().slice(0, 3);
+    const mIdx = months.indexOf(mLower);
+    if (mIdx !== -1) {
+      const monthNum = String(mIdx + 1).padStart(2, '0');
+      const dayNum = dayStr.padStart(2, '0');
+      return `${yearStr}-${monthNum}-${dayNum}`;
+    }
+  }
+
+  // Fallback to standard JS parsing
+  const parsed = Date.parse(cleaned);
+  if (!isNaN(parsed)) {
+    const d = new Date(parsed);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // Final fallback
+  return new Date().toISOString().split('T')[0];
+};
+
 export default function DataImport({ theme, clients, onImportClients, onImportWebsites }: DataImportProps) {
   const [importType, setImportType] = useState<'clients' | 'websites'>('clients');
   const [dragActive, setDragActive] = useState<boolean>(false);
@@ -26,9 +99,9 @@ export default function DataImport({ theme, clients, onImportClients, onImportWe
   const isDark = theme === 'dark';
 
   // Templates in CSV format for reference and copy-paste
-  const clientTemplate = `name,company,email,mobile,whatsapp,address,gstNumber,website,notes,status,totalBilled,pendingInvoice,workType,monthlyRetainerAmount
-"Aarav Sharma","Aarav Tech Solutions","aarav@aaravtech.com","+91 98765 43210","+91 98765 43210","Sector 62, Noida, UP","09AAACA1234A1Z1","https://aaravtech.com","Key digital marketing partner","Active",45000,15000,"retainer",15000
-"Priya Patel","Patel Exports","priya@patelexports.in","+91 91234 56789","+91 91234 56789","GIDC, Surat, Gujarat","24BBBPA4321B2Z2","https://patelexports.in","Shopify store development client","Active",120000,0,"one-time",0`;
+  const clientTemplate = `name,company,email,mobile,whatsapp,address,gstNumber,website,notes,status,totalBilled,pendingInvoice,workType,monthlyRetainerAmount,workStartDate
+"Aarav Sharma","Aarav Tech Solutions","aarav@aaravtech.com","+91 98765 43210","+91 98765 43210","Sector 62, Noida, UP","09AAACA1234A1Z1","https://aaravtech.com","Key digital marketing partner","Active",45000,15000,"retainer",15000,"Jan 15th 2024"
+"Priya Patel","Patel Exports","priya@patelexports.in","+91 91234 56789","+91 91234 56789","GIDC, Surat, Gujarat","24BBBPA4321B2Z2","https://patelexports.in","Shopify store development client","Active",120000,0,"one-time",0,"2024-02-20"`;
 
   const websiteTemplate = `name,url,hostingProvider,hostingPrice,hostingBillDate,domainRegistrar,domainPrice,domainBillDate,status,notes,clientName
 "Aarav Tech Corporate","https://aaravtech.com","Hostinger",4500,"2027-03-15","GoDaddy",850,"2027-03-15","Active","Corporate website, main node","Aarav Sharma"
@@ -152,6 +225,12 @@ export default function DataImport({ theme, clients, onImportClients, onImportWe
         const workType: 'retainer' | 'one-time' = getVal(['worktype', 'type', 'billingtype', 'retainer']).toLowerCase().includes('retainer') ? 'retainer' : 'one-time';
         const monthlyRetainerAmount = parseFloat(getVal(['monthlyretainer', 'retaineramount', 'monthly', 'monthlyfee', 'subscription'], '0').replace(/[^0-9.]/g, '')) || 0;
 
+        const rawCreatedAt = getVal(['created', 'createdat', 'date', 'joiningdate', 'dateofjoining', 'timestamp', 'onboarded', 'onboardingdate']);
+        const rawWorkStartDate = getVal(['startdate', 'workstartdate', 'commenced', 'commencement', 'agreementdate', 'workstart']) || rawCreatedAt;
+
+        const createdAt = parseDateToYYYYMMDD(rawCreatedAt);
+        const workStartDate = parseDateToYYYYMMDD(rawWorkStartDate);
+
         items.push({
           id: `client_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           name,
@@ -163,13 +242,13 @@ export default function DataImport({ theme, clients, onImportClients, onImportWe
           gstNumber,
           website,
           notes,
-          createdAt: new Date().toISOString().split('T')[0],
+          createdAt,
           status,
           metrics: {
             projectsCount: 0,
             totalBilled: isNaN(totalBilled) ? 0 : totalBilled,
             pendingInvoice: isNaN(pendingInvoice) ? 0 : pendingInvoice,
-            workStartDate: new Date().toISOString().split('T')[0],
+            workStartDate,
             workType,
             monthlyRetainerAmount: isNaN(monthlyRetainerAmount) ? 0 : monthlyRetainerAmount
           },
@@ -177,7 +256,7 @@ export default function DataImport({ theme, clients, onImportClients, onImportWe
           timeline: [
             {
               id: `timeline_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-              date: new Date().toISOString().split('T')[0],
+              date: createdAt,
               type: 'meeting',
               description: 'Client profile initialized via Excel/CSV import.'
             }
@@ -208,11 +287,13 @@ export default function DataImport({ theme, clients, onImportClients, onImportWe
 
         const hostingProvider = getVal(['hostingprovider', 'host', 'provider', 'server', 'cloud'], 'Hostinger Share Node');
         const hostingPrice = parseFloat(getVal(['hostingprice', 'hostprice', 'hostingcost', 'hostingfee', 'hostingamount', 'servercost', 'serverprice'], '0').replace(/[^0-9.]/g, '')) || 0;
-        const hostingBillDate = getVal(['hostingbilldate', 'hostdate', 'hostingbill', 'hostingdue', 'hostbill', 'hostbilldate', 'hostdue', 'hostingrenewal'], new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+        const rawHostingBillDate = getVal(['hostingbilldate', 'hostdate', 'hostingbill', 'hostingdue', 'hostbill', 'hostbilldate', 'hostdue', 'hostingrenewal']);
+        const hostingBillDate = parseDateToYYYYMMDD(rawHostingBillDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
         
         const domainRegistrar = getVal(['domainregistrar', 'registrar', 'godaddy', 'namecheap', 'domainprovider', 'registry'], 'Namecheap');
         const domainPrice = parseFloat(getVal(['domainprice', 'domaincost', 'domainfee', 'domainamount', 'regprice', 'registrarprice', 'domainrenewalcost'], '0').replace(/[^0-9.]/g, '')) || 0;
-        const domainBillDate = getVal(['domainbilldate', 'domaindate', 'domainbill', 'domaindue', 'registrardate', 'domainbilldate', 'domaindue', 'domainrenewal'], new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+        const rawDomainBillDate = getVal(['domainbilldate', 'domaindate', 'domainbill', 'domaindue', 'registrardate', 'domainbilldate', 'domaindue', 'domainrenewal']);
+        const domainBillDate = parseDateToYYYYMMDD(rawDomainBillDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
 
         let status: 'Active' | 'Inactive' | 'Under Maintenance' | 'Suspended' = 'Active';
         const rawStatus = getVal(['status', 'active', 'state', 'condition']).toLowerCase();
@@ -585,6 +666,7 @@ export default function DataImport({ theme, clients, onImportClients, onImportWe
                     <p><strong className={isDark ? 'text-slate-300' : 'text-slate-700'}>pendingInvoice:</strong> Unpaid invoice sum</p>
                     <p><strong className={isDark ? 'text-slate-300' : 'text-slate-700'}>workType:</strong> "retainer" or "one-time"</p>
                     <p><strong className={isDark ? 'text-slate-300' : 'text-slate-700'}>monthlyRetainerAmount:</strong> INR retainer value</p>
+                    <p><strong className={isDark ? 'text-slate-300' : 'text-slate-700'}>workStartDate:</strong> Project start date (e.g. "Jan 15th 2024" or "15/01/2024", auto-formatted smartly without error or using fallback)</p>
                   </div>
                 </div>
               ) : (

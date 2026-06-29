@@ -145,7 +145,8 @@ export const DbService = {
       const { data, error } = await supabase
         .from('clients')
         .select('*')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.warn('[Supabase Sync] getClients failed, using local fallback:', error);
@@ -201,7 +202,8 @@ export const DbService = {
       const { data: dbItems, error: fetchError } = await supabase
         .from('clients')
         .select('id')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
       if (fetchError) {
         if (isTableMissingError(fetchError)) return;
@@ -252,7 +254,8 @@ export const DbService = {
       const { data, error } = await supabase
         .from('leads')
         .select('*')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.warn('[Supabase Sync] getLeads failed, using local fallback:', error);
@@ -301,7 +304,8 @@ export const DbService = {
       const { data: dbItems, error: fetchError } = await supabase
         .from('leads')
         .select('id')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
       if (fetchError) {
         if (isTableMissingError(fetchError)) return;
@@ -347,7 +351,8 @@ export const DbService = {
       const { data, error } = await supabase
         .from('projects')
         .select('*')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('id', { ascending: false });
 
       if (error) {
         console.warn('[Supabase Sync] getProjects failed, using local fallback:', error);
@@ -398,7 +403,8 @@ export const DbService = {
       const { data: dbItems, error: fetchError } = await supabase
         .from('projects')
         .select('id')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('id', { ascending: false });
 
       if (fetchError) {
         if (isTableMissingError(fetchError)) return;
@@ -446,7 +452,8 @@ export const DbService = {
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.warn('[Supabase Sync] getTasks failed, using local fallback:', error);
@@ -493,7 +500,8 @@ export const DbService = {
       const { data: dbItems, error: fetchError } = await supabase
         .from('tasks')
         .select('id')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
       if (fetchError) {
         if (isTableMissingError(fetchError)) return;
@@ -537,7 +545,8 @@ export const DbService = {
       const { data, error } = await supabase
         .from('payments')
         .select('*')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('id', { ascending: false });
 
       if (error) {
         console.warn('[Supabase Sync] getPayments failed, using local fallback:', error);
@@ -586,7 +595,8 @@ export const DbService = {
       const { data: dbItems, error: fetchError } = await supabase
         .from('payments')
         .select('id')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('id', { ascending: false });
 
       if (fetchError) {
         if (isTableMissingError(fetchError)) return;
@@ -643,6 +653,7 @@ export const DbService = {
         .select('*')
         .eq('user_id', userId)
         .eq('id', '__system_extra_data__')
+        .order('created_at', { ascending: false })
         .maybeSingle();
 
       if (error) {

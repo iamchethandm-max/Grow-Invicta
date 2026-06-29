@@ -232,7 +232,7 @@ export default function App() {
             localStorage.setItem(`user_${user.id}_${key}`, JSON.stringify(dbExtraData[key]));
             return dbExtraData[key];
           }
-          const item = localStorage.getItem(`user_${user.id}_${key}`);
+          const item = localStorage.getItem(`user_${user.id}_${key}`) || localStorage.getItem(key);
           return item ? JSON.parse(item) : def;
         };
 
@@ -242,6 +242,15 @@ export default function App() {
         setWebsites(getLocalItem('websites', isNewSignup ? [] : INITIAL_WEBSITES));
         setTimeLogs(getLocalItem('timeLogs', isNewSignup ? [] : INITIAL_TIME_LOGS));
         setArchivedItems(getLocalItem('archivedItems', []));
+
+        const defaultFeatures = {
+          leads: false,
+          timetracker: true,
+          payments: false,
+          websites: false,
+          calendar: false
+        };
+        setEnabledFeatures(getLocalItem('enabledFeatures', defaultFeatures));
 
         const compName = profile?.company_name || 'My SaaS Business';
         const fName = profile?.full_name || 'User';
@@ -388,6 +397,9 @@ export default function App() {
     setEnabledFeatures(prev => {
       const next = { ...prev, [featureId]: !prev[featureId] };
       localStorage.setItem('enabledFeatures', JSON.stringify(next));
+      if (user) {
+        localStorage.setItem(`user_${user.id}_enabledFeatures`, JSON.stringify(next));
+      }
       return next;
     });
   };
@@ -443,6 +455,7 @@ export default function App() {
       localStorage.setItem(`user_${user.id}_timeLogs`, JSON.stringify(timeLogs));
       localStorage.setItem(`user_${user.id}_archivedItems`, JSON.stringify(archivedItems));
       localStorage.setItem(`user_${user.id}_profileSettings`, JSON.stringify(profileSettings));
+      localStorage.setItem(`user_${user.id}_enabledFeatures`, JSON.stringify(enabledFeatures));
 
       // Sync auxiliary data to database so it is shared across all devices (Desktop, Tablet, Mobile)
       DbService.saveExtraData(user.id, {
@@ -452,10 +465,11 @@ export default function App() {
         websites,
         timeLogs,
         archivedItems,
-        profileSettings
+        profileSettings,
+        enabledFeatures
       });
     }
-  }, [finances, reminders, auditLogs, websites, timeLogs, archivedItems, profileSettings, user, dbLoaded]);
+  }, [finances, reminders, auditLogs, websites, timeLogs, archivedItems, profileSettings, enabledFeatures, user, dbLoaded]);
 
 
   useEffect(() => { saveStateToStorage('theme', theme); }, [theme]);
@@ -508,7 +522,7 @@ export default function App() {
         setArchivedItems(parsed);
       } else if (e.key === `user_${userId}_profileSettings`) {
         setProfileSettings(parsed);
-      } else if (e.key === 'enabledFeatures') {
+      } else if (e.key === 'enabledFeatures' || e.key === `user_${userId}_enabledFeatures`) {
         setEnabledFeatures(parsed);
       }
     };
