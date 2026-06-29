@@ -6,9 +6,9 @@
 import React, { useState } from 'react';
 import { 
   Plus, Edit, Trash2, IndianRupee, FileText, Download, 
-  Send, RefreshCcw, Landmark, Percent, PieChart, Calendar, X, CheckSquare, Wallet, HelpCircle
+  Send, RefreshCcw, Landmark, Percent, PieChart, Calendar, X, CheckSquare, Wallet, HelpCircle, Sparkles
 } from 'lucide-react';
-import { Payment, FinanceLedger, Client } from '../types';
+import { Payment, FinanceLedger, Client, Website } from '../types';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { formatIndianDate } from '../utils/dateUtils';
 
@@ -17,6 +17,7 @@ interface FinanceManagerProps {
   payments: Payment[];
   finances: FinanceLedger[];
   clients: Client[];
+  websites?: Website[];
   onAddPayment: (newPay: Payment) => void;
   onEditPayment: (updatedPay: Payment) => void;
   onDeletePayment: (id: string) => void;
@@ -26,12 +27,13 @@ interface FinanceManagerProps {
 }
 
 export default function FinanceManager({ 
-  payments, finances, clients = [], onAddPayment, onEditPayment, onDeletePayment, 
+  payments, finances, clients = [], websites = [], onAddPayment, onEditPayment, onDeletePayment, 
   onAddFinance, onEditFinance, onDeleteFinance 
 }: FinanceManagerProps) {
   // Tabs updated to: Client_Payments, My_Expenses
   const [activeFinanceTab, setActiveFinanceTab] = useState<'Client_Payments' | 'My_Expenses'>('Client_Payments');
   const [billingMonth, setBillingMonth] = useState('2026-07');
+  const [checklistType, setChecklistType] = useState<'retainers' | 'subscriptions'>('retainers');
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(payments[0] || null);
   const [deleteTarget, setDeleteTarget] = useState<{
     type: 'payment' | 'finance';
@@ -420,156 +422,372 @@ export default function FinanceManager({
       {/* VIEW SECTION 1: CLIENT PAYMENTS */}
       {activeFinanceTab === 'Client_Payments' && (
         <div className="space-y-6">
-          {/* Month-End Retainer Checklist Card */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg">
-                    <Calendar className="w-4 h-4" />
-                  </span>
-                  <h3 className="text-sm font-semibold text-slate-200 font-sans">Month-End Retainer Checklist</h3>
-                </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Reconcile and track retainer status for active clients. Marking as Paid instantly generates the corresponding ledger invoice.
-                </p>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-slate-400 font-mono font-bold uppercase">Billing Month:</label>
-                <select
-                  value={billingMonth}
-                  onChange={(e) => setBillingMonth(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 text-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-medium focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="2026-06">June 2026 (Current)</option>
-                  <option value="2026-07">July 2026 (Upcoming)</option>
-                  <option value="2026-08">August 2026</option>
-                </select>
-              </div>
-            </div>
+          {/* Month-End Retainers & Subscriptions Reconciler Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm" id="month-end-checklist-container">
+            {(() => {
+              const today = new Date();
+              const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+              const currentDay = today.getDate();
+              const isMonthEndWindow = (lastDayOfMonth - currentDay) <= 3;
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {clients
-                .filter(c => c.status === 'Active' && c.metrics?.monthlyRetainerAmount && c.metrics.monthlyRetainerAmount > 0)
-                .map(client => {
-                  const existingPay = payments.find(p => p.clientName === client.name && p.dueDate.startsWith(billingMonth));
-                  const isPaid = existingPay?.status === 'Paid';
-                  const amount = client.metrics?.monthlyRetainerAmount || 0;
+              // Generate subscriptions renewal list
+              const renewalItems = (websites || []).flatMap(web => {
+                const items = [];
+                const client = clients.find(c => c.id === web.clientId);
+                const clientName = client?.name || 'Independent Client';
 
-                  return (
-                    <div key={client.id} className="p-3.5 bg-slate-950/55 rounded-xl border border-slate-850 hover:border-slate-800 transition-colors flex flex-col justify-between gap-3">
-                      <div>
-                        <div className="flex justify-between items-start">
-                          <span className="text-xs font-bold text-slate-200 block truncate max-w-[150px]" title={client.company || client.name}>
-                            {client.company || client.name}
-                          </span>
-                          <span className={`px-1.5 py-0.5 rounded text-[8.5px] font-mono leading-none ${
-                            isPaid 
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                              : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
-                          }`}>
-                            {isPaid ? 'Paid' : 'Unpaid'}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-mono mt-1">Rep: {client.name}</p>
-                        <div className="mt-2 text-xs font-semibold text-slate-300 font-mono">
-                          ₹{amount.toLocaleString('en-IN')}
-                          <span className="text-[10px] text-slate-500 font-normal">/mo</span>
-                        </div>
-                      </div>
+                if (web.domainPrice && web.domainPrice > 0) {
+                  const pId = `INV-DOM-${web.id}`;
+                  const existingPay = payments.find(p => p.invoiceNumber === pId);
+                  items.push({
+                    id: `${web.id}_domain`,
+                    type: 'domain' as const,
+                    website: web,
+                    clientName,
+                    title: 'Annual Domain Renewal',
+                    price: web.domainPrice,
+                    dueDate: web.domainBillDate,
+                    existingPay,
+                    isPaid: existingPay?.status === 'Paid',
+                    invoiceNumber: pId,
+                    details: `Domain Registrar: ${web.domainRegistrar || 'GoDaddy'}`
+                  });
+                }
 
-                      <div className="flex gap-2 border-t border-slate-850 pt-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (existingPay) {
-                              const updated: Payment = {
-                                ...existingPay,
-                                status: 'Paid',
-                                paidAmount: existingPay.amount,
-                                pendingAmount: 0,
-                                paymentDate: new Date().toISOString().split('T')[0]
-                              };
-                              onEditPayment(updated);
-                            } else {
-                              const newPay: Payment = {
-                                id: `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                                clientName: client.name,
-                                invoiceNumber: `INV-${billingMonth.replace('-', '')}-${Math.floor(100 + Math.random() * 905)}`,
-                                amount: amount,
-                                paidAmount: amount,
-                                pendingAmount: 0,
-                                paymentDate: new Date().toISOString().split('T')[0],
-                                dueDate: `${billingMonth}-01`,
-                                mode: 'Bank Transfer',
-                                status: 'Paid',
-                                gstAmount: client.gstNumber ? Math.round(amount * 0.18) : 0,
-                                autoGenerated: true,
-                                serviceDetails: 'Monthly Retainer Fee',
-                                serviceDescription: `Automated month-end retainer reconciliation invoice for ${billingMonth}.`
-                              };
-                              onAddPayment(newPay);
-                            }
-                          }}
-                          className={`flex-1 py-1 px-2 text-[10.5px] font-medium rounded-md transition-colors ${
-                            isPaid 
-                              ? 'bg-emerald-950/20 text-emerald-500/60 cursor-default' 
-                              : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
-                          }`}
-                        >
-                          Mark Paid
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (existingPay) {
-                              const updated: Payment = {
-                                ...existingPay,
-                                status: 'Pending',
-                                paidAmount: 0,
-                                pendingAmount: existingPay.amount,
-                                paymentDate: ''
-                              };
-                              onEditPayment(updated);
-                            } else {
-                              const newPay: Payment = {
-                                id: `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                                clientName: client.name,
-                                invoiceNumber: `INV-${billingMonth.replace('-', '')}-${Math.floor(100 + Math.random() * 905)}`,
-                                amount: amount,
-                                paidAmount: 0,
-                                pendingAmount: amount,
-                                paymentDate: '',
-                                dueDate: `${billingMonth}-01`,
-                                mode: 'Bank Transfer',
-                                status: 'Pending',
-                                gstAmount: client.gstNumber ? Math.round(amount * 0.18) : 0,
-                                autoGenerated: true,
-                                serviceDetails: 'Monthly Retainer Fee',
-                                serviceDescription: `Automated month-end retainer reconciliation invoice for ${billingMonth}.`
-                              };
-                              onAddPayment(newPay);
-                            }
-                          }}
-                          className={`flex-1 py-1 px-2 text-[10.5px] font-medium rounded-md transition-colors ${
-                            existingPay && !isPaid
-                              ? 'bg-slate-950 text-slate-600 cursor-default'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer'
-                          }`}
-                        >
-                          Mark Unpaid
-                        </button>
-                      </div>
+                if (web.hostingPrice && web.hostingPrice > 0) {
+                  const pId = `INV-HOST-${web.id}`;
+                  const existingPay = payments.find(p => p.invoiceNumber === pId);
+                  items.push({
+                    id: `${web.id}_hosting`,
+                    type: 'hosting' as const,
+                    website: web,
+                    clientName,
+                    title: 'Annual Hosting Subscription',
+                    price: web.hostingPrice,
+                    dueDate: web.hostingBillDate,
+                    existingPay,
+                    isPaid: existingPay?.status === 'Paid',
+                    invoiceNumber: pId,
+                    details: `Hosting Provider: ${web.hostingProvider || 'Hostinger'}`
+                  });
+                }
+
+                return items;
+              });
+
+              return (
+                <>
+                  {isMonthEndWindow && (
+                    <div className="mb-4 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-2.5">
+                      <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" />
+                      <span className="text-xs text-indigo-300 font-medium">
+                        Month-End Reconciliation Window Active (Last 3 days of the month). Reconcile upcoming retainer and domain/hosting renewals.
+                      </span>
                     </div>
-                  );
-                })}
-              {clients.filter(c => c.status === 'Active' && c.metrics?.monthlyRetainerAmount && c.metrics.monthlyRetainerAmount > 0).length === 0 && (
-                <div className="col-span-full text-center py-6 text-slate-500 font-mono text-xs">
-                  No active clients with monthly retainers found. Add retainer metrics to clients in CRM.
-                </div>
-              )}
-            </div>
+                  )}
+
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg">
+                          <CheckSquare className="w-4 h-4" />
+                        </span>
+                        <h3 className="text-sm font-semibold text-slate-200 font-sans">Month-End Billing & Subscription Checklist</h3>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Track upcoming client commitments. Marking as Paid automatically adds ledger receipts and updates the dashboard.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      {/* Tabs for switching checklist type */}
+                      <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setChecklistType('retainers')}
+                          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                            checklistType === 'retainers'
+                              ? 'bg-indigo-600 text-white'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          📅 Monthly Retainers
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setChecklistType('subscriptions')}
+                          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                            checklistType === 'subscriptions'
+                              ? 'bg-indigo-600 text-white'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          🌐 Yearly Domains & Hosting
+                        </button>
+                      </div>
+
+                      {checklistType === 'retainers' && (
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] text-slate-550 font-mono font-bold uppercase">Month:</label>
+                          <select
+                            value={billingMonth}
+                            onChange={(e) => setBillingMonth(e.target.value)}
+                            className="bg-slate-950 border border-slate-800 text-slate-300 rounded-lg px-2 py-1 text-xs font-mono focus:outline-none focus:border-indigo-500"
+                          >
+                            <option value="2026-06">June 2026</option>
+                            <option value="2026-07">July 2026</option>
+                            <option value="2026-08">August 2026</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {checklistType === 'retainers' ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {clients
+                        .filter(c => c.status === 'Active' && c.metrics?.monthlyRetainerAmount && c.metrics.monthlyRetainerAmount > 0)
+                        .map(client => {
+                          const existingPay = payments.find(p => p.clientName === client.name && p.dueDate.startsWith(billingMonth));
+                          const isPaid = existingPay?.status === 'Paid';
+                          const amount = client.metrics?.monthlyRetainerAmount || 0;
+
+                          return (
+                            <div key={client.id} className="p-3.5 bg-slate-950/55 rounded-xl border border-slate-850 hover:border-slate-800 transition-colors flex flex-col justify-between gap-3">
+                              <div>
+                                <div className="flex justify-between items-start">
+                                  <span className="text-xs font-bold text-slate-200 block truncate max-w-[150px]" title={client.company || client.name}>
+                                    {client.company || client.name}
+                                  </span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[8.5px] font-mono leading-none ${
+                                    isPaid 
+                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                      : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                                  }`}>
+                                    {isPaid ? 'Paid' : 'Unpaid'}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 font-mono mt-1">Rep: {client.name}</p>
+                                <div className="mt-2 text-xs font-semibold text-slate-300 font-mono">
+                                  ₹{amount.toLocaleString('en-IN')}
+                                  <span className="text-[10px] text-slate-500 font-normal">/mo</span>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2 border-t border-slate-850 pt-3">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (existingPay) {
+                                      const updated: Payment = {
+                                        ...existingPay,
+                                        status: 'Paid',
+                                        paidAmount: existingPay.amount,
+                                        pendingAmount: 0,
+                                        paymentDate: new Date().toISOString().split('T')[0]
+                                      };
+                                      onEditPayment(updated);
+                                    } else {
+                                      const newPay: Payment = {
+                                        id: `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                        clientName: client.name,
+                                        invoiceNumber: `INV-${billingMonth.replace('-', '')}-${Math.floor(100 + Math.random() * 905)}`,
+                                        amount: amount,
+                                        paidAmount: amount,
+                                        pendingAmount: 0,
+                                        paymentDate: new Date().toISOString().split('T')[0],
+                                        dueDate: `${billingMonth}-01`,
+                                        mode: 'Bank Transfer',
+                                        status: 'Paid',
+                                        gstAmount: client.gstNumber ? Math.round(amount * 0.18) : 0,
+                                        autoGenerated: true,
+                                        serviceDetails: 'Monthly Retainer Fee',
+                                        serviceDescription: `Automated month-end retainer reconciliation invoice for ${billingMonth}.`
+                                      };
+                                      onAddPayment(newPay);
+                                    }
+                                  }}
+                                  className={`flex-1 py-1.5 px-2 text-[10.5px] font-medium rounded-md transition-colors text-center ${
+                                    isPaid 
+                                      ? 'bg-emerald-950/20 text-emerald-550/50 cursor-default' 
+                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                                  }`}
+                                >
+                                  Mark Paid
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (existingPay) {
+                                      const updated: Payment = {
+                                        ...existingPay,
+                                        status: 'Pending',
+                                        paidAmount: 0,
+                                        pendingAmount: existingPay.amount,
+                                        paymentDate: ''
+                                      };
+                                      onEditPayment(updated);
+                                    } else {
+                                      const newPay: Payment = {
+                                        id: `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                        clientName: client.name,
+                                        invoiceNumber: `INV-${billingMonth.replace('-', '')}-${Math.floor(100 + Math.random() * 905)}`,
+                                        amount: amount,
+                                        paidAmount: 0,
+                                        pendingAmount: amount,
+                                        paymentDate: '',
+                                        dueDate: `${billingMonth}-01`,
+                                        mode: 'Bank Transfer',
+                                        status: 'Pending',
+                                        gstAmount: client.gstNumber ? Math.round(amount * 0.18) : 0,
+                                        autoGenerated: true,
+                                        serviceDetails: 'Monthly Retainer Fee',
+                                        serviceDescription: `Automated month-end retainer reconciliation invoice for ${billingMonth}.`
+                                      };
+                                      onAddPayment(newPay);
+                                    }
+                                  }}
+                                  className={`flex-1 py-1.5 px-2 text-[10.5px] font-medium rounded-md transition-colors text-center ${
+                                    existingPay && !isPaid
+                                      ? 'bg-slate-950 text-slate-650 cursor-default'
+                                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer'
+                                  }`}
+                                >
+                                  Mark Unpaid
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      {clients.filter(c => c.status === 'Active' && c.metrics?.monthlyRetainerAmount && c.metrics.monthlyRetainerAmount > 0).length === 0 && (
+                        <div className="col-span-full text-center py-6 text-slate-500 font-mono text-xs">
+                          No active clients with monthly retainers found. Add retainer metrics to clients in CRM.
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {renewalItems.map(item => (
+                        <div key={item.id} className="p-3.5 bg-slate-950/55 rounded-xl border border-slate-850 hover:border-slate-800 transition-colors flex flex-col justify-between gap-3">
+                          <div>
+                            <div className="flex justify-between items-start">
+                              <span className="text-xs font-bold text-slate-200 block truncate max-w-[150px]" title={item.website.name}>
+                                {item.website.url}
+                              </span>
+                              <span className={`px-1.5 py-0.5 rounded text-[8.5px] font-mono leading-none ${
+                                item.isPaid 
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                  : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                              }`}>
+                                {item.isPaid ? 'Paid' : 'Unpaid'}
+                              </span>
+                            </div>
+                            <p className="text-[9px] text-slate-400 font-mono mt-1 font-semibold">{item.title}</p>
+                            <p className="text-[10px] text-slate-500 font-mono mt-0.5">Client: {item.clientName}</p>
+                            <p className="text-[9px] text-slate-500 font-mono mt-0.5">{item.details}</p>
+                            <div className="mt-2 text-xs font-semibold text-slate-300 font-mono">
+                              ₹{item.price.toLocaleString('en-IN')}
+                              <span className="text-[9px] text-slate-500 font-normal"> /yr</span>
+                            </div>
+                            <p className="text-[9.5px] text-indigo-400 font-mono mt-1">Due: {item.dueDate || 'N/A'}</p>
+                          </div>
+
+                          <div className="flex gap-2 border-t border-slate-850 pt-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const clientObj = clients.find(c => c.name === item.clientName);
+                                if (item.existingPay) {
+                                  const updated: Payment = {
+                                    ...item.existingPay,
+                                    status: 'Paid',
+                                    paidAmount: item.price,
+                                    pendingAmount: 0,
+                                    paymentDate: new Date().toISOString().split('T')[0]
+                                  };
+                                  onEditPayment(updated);
+                                } else {
+                                  const newPay: Payment = {
+                                    id: `pay_sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                    clientName: item.clientName,
+                                    invoiceNumber: item.invoiceNumber,
+                                    amount: item.price,
+                                    paidAmount: item.price,
+                                    pendingAmount: 0,
+                                    paymentDate: new Date().toISOString().split('T')[0],
+                                    dueDate: item.dueDate || new Date().toISOString().split('T')[0],
+                                    mode: 'Bank Transfer',
+                                    status: 'Paid',
+                                    gstAmount: clientObj?.gstNumber ? Math.round(item.price * 0.18) : 0,
+                                    autoGenerated: true,
+                                    serviceDetails: item.title,
+                                    serviceDescription: `Yearly subscription fee for ${item.website.url} (${item.details}).`
+                                  };
+                                  onAddPayment(newPay);
+                                }
+                              }}
+                              className={`flex-1 py-1.5 px-2 text-[10.5px] font-medium rounded-md transition-colors text-center ${
+                                item.isPaid 
+                                  ? 'bg-emerald-950/20 text-emerald-550/50 cursor-default' 
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                              }`}
+                            >
+                              Mark Paid
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (item.existingPay) {
+                                  const updated: Payment = {
+                                    ...item.existingPay,
+                                    status: 'Pending',
+                                    paidAmount: 0,
+                                    pendingAmount: item.price,
+                                    paymentDate: ''
+                                  };
+                                  onEditPayment(updated);
+                                } else {
+                                  const clientObj = clients.find(c => c.name === item.clientName);
+                                  const newPay: Payment = {
+                                    id: `pay_sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                    clientName: item.clientName,
+                                    invoiceNumber: item.invoiceNumber,
+                                    amount: item.price,
+                                    paidAmount: 0,
+                                    pendingAmount: item.price,
+                                    paymentDate: '',
+                                    dueDate: item.dueDate || new Date().toISOString().split('T')[0],
+                                    mode: 'Bank Transfer',
+                                    status: 'Pending',
+                                    gstAmount: clientObj?.gstNumber ? Math.round(item.price * 0.18) : 0,
+                                    autoGenerated: true,
+                                    serviceDetails: item.title,
+                                    serviceDescription: `Yearly subscription fee for ${item.website.url} (${item.details}).`
+                                  };
+                                  onAddPayment(newPay);
+                                }
+                              }}
+                              className={`flex-1 py-1.5 px-2 text-[10.5px] font-medium rounded-md transition-colors text-center ${
+                                item.existingPay && !item.isPaid
+                                  ? 'bg-slate-950 text-slate-650 cursor-default'
+                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer'
+                              }`}
+                            >
+                              Mark Unpaid
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {renewalItems.length === 0 && (
+                        <div className="col-span-full text-center py-6 text-slate-500 font-mono text-xs">
+                          No registered websites with yearly domain or hosting fees found.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

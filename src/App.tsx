@@ -103,6 +103,28 @@ export default function App() {
   useEffect(() => {
     if (!user) {
       setDbLoaded(false);
+      setClients([]);
+      setLeads([]);
+      setProjects([]);
+      setTasks([]);
+      setPayments([]);
+      setFinances([]);
+      setReminders([]);
+      setAuditLogs([]);
+      setWebsites([]);
+      setTimeLogs([]);
+      setArchivedItems([]);
+      setProfileSettings({
+        companyName: 'GrowInvicta',
+        companyLogoUrl: '',
+        personalName: 'Chethan D. M.',
+        email: 'iamchethandm@gmail.com',
+        phone: '+91 98450 12345',
+        role: 'Managing Director & CEO',
+        address: 'Outer Ring Road, Bangalore, KA, IN',
+        timezone: 'Asia/Kolkata (IST)',
+        accentColor: 'indigo'
+      });
       return;
     }
 
@@ -748,7 +770,7 @@ export default function App() {
   const billingNotifications = getBillingNotifications();
   const totalAlertsCount = reminders.length + billingNotifications.length;
 
-  if (authLoading) {
+  if (authLoading || (user && !dbLoaded)) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center font-mono ${
         theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-gray-50 text-gray-900'
@@ -960,33 +982,36 @@ export default function App() {
             <div className={`p-4 border-t space-y-3.5 mt-4 ${
               theme === 'light' ? 'border-gray-200 bg-gray-50/50' : 'border-slate-850 bg-slate-950/60'
             }`}>
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className={`h-8 w-8 rounded-full flex items-center justify-center border flex-shrink-0 ${
-                  theme === 'light' ? 'bg-gray-200 border-indigo-400/20' : 'bg-slate-850 border-indigo-500/20'
-                }`}>
-                  <span className="text-[10px] font-bold text-indigo-400 font-mono">CH</span>
+              {/* Emerald AI Assistant trigger button */}
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('open-ai-assistant'));
+                  writeAuditEntry('AI Assistant Trigger', 'AI Assistant drawer opened from sidebar.');
+                }}
+                className={`w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl shadow-lg cursor-pointer transition-all duration-300 font-mono text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 hover:shadow-emerald-500/20 active:scale-95 ${
+                  isSidebarCollapsed && !isMobileMenuOpen ? 'p-2.5 justify-center' : ''
+                }`}
+                title="Prompt AI Assistant"
+              >
+                <Sparkles className="w-4 h-4 text-emerald-200 animate-pulse flex-shrink-0" />
+                {(!isSidebarCollapsed || isMobileMenuOpen) && <span className="truncate">Prompt AI Assistant</span>}
+              </button>
+
+              {/* User profile details */}
+              <div className="flex items-center gap-2.5 min-w-0 pt-2 border-t border-dashed border-gray-200 dark:border-slate-800">
+                <div className="h-8 w-8 rounded-full flex items-center justify-center bg-blue-600 text-white font-mono text-xs font-bold flex-shrink-0 shadow-sm">
+                  {currentUsername.slice(0, 2).toUpperCase()}
                 </div>
                 {(!isSidebarCollapsed || isMobileMenuOpen) && (
-                  <div className="min-w-0">
-                    <p className={`text-xs font-semibold truncate ${theme === 'light' ? 'text-gray-900' : 'text-slate-200'}`}>{currentUsername}</p>
-                    <span className="text-[9.5px] text-indigo-500 font-mono font-medium block truncate">{profileSettings.role || currentUserRole}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-xs font-bold truncate ${theme === 'light' ? 'text-gray-900' : 'text-slate-200'}`}>
+                      {currentUsername}
+                    </p>
+                    <span className="text-[9.5px] text-indigo-500 font-mono font-medium block truncate">
+                      {profileSettings.role || currentUserRole}
+                    </span>
                   </div>
                 )}
-              </div>
-
-              <div className="flex justify-between items-center pt-1 border-t border-slate-850 text-[10px] font-mono text-slate-500">
-                {(!isSidebarCollapsed || isMobileMenuOpen) && <span>Ver: Enterprise v2.5</span>}
-                <button 
-                  onClick={async () => {
-                    setIsMobileMenuOpen(false);
-                    writeAuditEntry('Sign out trigger', 'Manual console token expiration scheduled.');
-                    await signOut();
-                  }}
-                  className="text-rose-450 hover:underline flex items-center gap-0.5 cursor-pointer"
-                >
-                  <LogOut className="w-3 h-3" />
-                  {(!isSidebarCollapsed || isMobileMenuOpen) && <span>Sign out</span>}
-                </button>
               </div>
             </div>
           </div>
@@ -1018,6 +1043,23 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2.5 ml-3">
+            
+            {/* Prominent Standalone Sign Out Button */}
+            <button
+              onClick={async () => {
+                writeAuditEntry('Sign out trigger', 'Manual console token expiration scheduled.');
+                await signOut();
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono font-bold transition-all duration-300 cursor-pointer ${
+                theme === 'light'
+                  ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 hover:border-rose-300 active:scale-95 shadow-xs'
+                  : 'bg-rose-950/30 border-rose-900/40 text-rose-400 hover:bg-rose-900/20 hover:border-rose-800 active:scale-95 shadow-md'
+              }`}
+              title="Sign Out of GrowInvicta"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-500" />
+              <span>Sign Out</span>
+            </button>
             
             {/* Theme switcher toggle */}
             <button
@@ -1140,6 +1182,7 @@ export default function App() {
               tasks={tasks} 
               payments={payments}
               finances={finances}
+              websites={websites}
               onNavigate={(tab) => setActiveTab(tab)}
               currentUsername={currentUsername}
               companyName={profileSettings.companyName}
@@ -1226,6 +1269,8 @@ export default function App() {
             <FinanceManager 
               payments={payments}
               finances={finances}
+              clients={clients}
+              websites={websites}
               onAddPayment={(p) => setPayments(prev => [...prev, p])}
               onEditPayment={(p) => setPayments(prev => prev.map(item => item.id === p.id ? p : item))}
               onDeletePayment={(id) => {

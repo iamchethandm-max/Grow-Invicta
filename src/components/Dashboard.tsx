@@ -6,9 +6,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, Briefcase, CheckCircle2, AlertTriangle, IndianRupee, TrendingUp, 
-  Sparkles, Megaphone, ArrowUpRight, DollarSign, Calendar, Clock
+  Sparkles, Megaphone, ArrowUpRight, DollarSign, Calendar, Clock, Globe, Server
 } from 'lucide-react';
-import { Client, Project, Task, Payment, Lead, FinanceLedger } from '../types';
+import { Client, Project, Task, Payment, Lead, FinanceLedger, Website } from '../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 
 interface DashboardProps {
@@ -18,6 +18,7 @@ interface DashboardProps {
   tasks: Task[];
   payments: Payment[];
   finances: FinanceLedger[];
+  websites?: Website[];
   onNavigate: (tab: any) => void;
   currentUsername?: string;
   companyName?: string;
@@ -25,7 +26,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ 
-  clients, leads, projects, tasks, payments, finances, onNavigate,
+  clients, leads, projects, tasks, payments, finances, websites = [], onNavigate,
   currentUsername = 'Chethan D. M.',
   companyName = 'GrowInvicta',
   enabledFeatures = { leads: true, timetracker: true, payments: true, websites: true, calendar: true }
@@ -121,6 +122,12 @@ export default function Dashboard({
   // Leads
   const leadsGenerated = leads.length;
   const leadsConverted = leads.filter(l => l.status === 'Won').length;
+
+  // Yearly Domain & Hosting contract value (potential annual subscription revenue)
+  const yearlyDomainHostingRevenue = (websites || []).reduce(
+    (sum, w) => sum + (w.domainPrice || 0) + (w.hostingPrice || 0),
+    0
+  );
 
   // Helper to extract month (e.g. "01", "02") from a date string
   const getMonthFromDate = (dateStr: string) => {
@@ -319,101 +326,14 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* Primary KPI Grid (10 interactive cards) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        {/* Total Clients */}
-        <div 
-          onClick={() => onNavigate('clients')}
-          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-indigo-500 transition-all cursor-pointer group"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-medium text-slate-400">Total Clients</span>
-            <span className="p-1.5 bg-slate-950 rounded-lg text-indigo-400 group-hover:bg-indigo-950 transition-colors">
-              <Users className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="text-2xl font-semibold text-white tracking-tight">{clients.length}</div>
-          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
-            <span>{activeClients} Active CRM</span>
-            <span className="text-indigo-400 group-hover:underline">Manage &rarr;</span>
-          </div>
-        </div>
-
-        {/* Active Projects */}
-        <div 
-          onClick={() => onNavigate('projects')}
-          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-emerald-500 transition-all cursor-pointer group"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-medium text-slate-400">Active Projects</span>
-            <span className="p-1.5 bg-slate-950 rounded-lg text-emerald-400 group-hover:bg-emerald-950 transition-colors">
-              <Briefcase className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="text-2xl font-semibold text-white tracking-tight">{activeProj}</div>
-          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
-            <span>In Pipeline</span>
-            <span className="text-emerald-400 group-hover:underline">Kanban &rarr;</span>
-          </div>
-        </div>
-
-        {/* Completed Projects */}
-        <div 
-          onClick={() => onNavigate('projects')}
-          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-emerald-500 transition-all cursor-pointer group"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-medium text-slate-400">Completed</span>
-            <span className="p-1.5 bg-slate-950 rounded-lg text-emerald-500 group-hover:bg-emerald-950 transition-colors">
-              <CheckCircle2 className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="text-2xl font-semibold text-white tracking-tight">{completedProj}</div>
-          <div className="text-[10px] text-emerald-400 mt-1">
-            Build deliverables finalized
-          </div>
-        </div>
-
-        {/* Pending Tasks */}
-        <div 
-          onClick={() => onNavigate('tasks')}
-          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-amber-500 transition-all cursor-pointer group"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-medium text-slate-400">Pending Tasks</span>
-            <span className="p-1.5 bg-slate-950 rounded-lg text-amber-400 group-hover:bg-amber-950 transition-colors">
-              <Clock className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="text-2xl font-semibold text-white tracking-tight">{pendingTasks}</div>
-          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
-            <span>Staff Schedules</span>
-            <span className="text-amber-400 group-hover:underline">Checklist &rarr;</span>
-          </div>
-        </div>
-
-        {/* Overdue Tasks */}
-        <div 
-          onClick={() => onNavigate('tasks')}
-          className="p-4 bg-slate-900 rounded-xl border border-slate-850 shadow-sm hover:border-red-500 transition-all cursor-pointer group"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-medium text-slate-400">Overdue Tasks</span>
-            <span className="p-1.5 bg-slate-950 rounded-lg text-red-400 group-hover:bg-red-950 transition-colors">
-              <AlertTriangle className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="text-2xl font-bold text-red-400 tracking-tight">{overdueTasks}</div>
-          <div className="text-[10px] text-red-400/90 mt-1">
-            Needs priority follow ups
-          </div>
-        </div>
-
+      {/* Primary KPI Grid (11 interactive cards rearranged) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         {/* Total Revenue */}
         {enabledFeatures.payments && (
           <div 
             onClick={() => onNavigate('payments')}
             className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-indigo-400 transition-all cursor-pointer group"
+            id="kpi-total-revenue"
           >
             <div className="flex justify-between items-center mb-2">
               <span className="text-xs font-medium text-slate-400">Total Revenue</span>
@@ -436,6 +356,7 @@ export default function Dashboard({
           <div 
             onClick={() => onNavigate('payments')}
             className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-indigo-400 transition-all cursor-pointer group"
+            id="kpi-monthly-revenue"
           >
             <div className="flex justify-between items-center mb-2">
               <span className="text-xs font-medium text-slate-400">Monthly Revenue</span>
@@ -453,11 +374,12 @@ export default function Dashboard({
           </div>
         )}
 
-        {/* Pending Payments */}
+        {/* Pending Payments / Outstanding Invoices */}
         {enabledFeatures.payments && (
           <div 
             onClick={() => onNavigate('payments')}
             className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-amber-500 transition-all cursor-pointer group"
+            id="kpi-outstanding-invoices"
           >
             <div className="flex justify-between items-center mb-2">
               <span className="text-xs font-medium text-slate-400">Outstanding Invoices</span>
@@ -475,11 +397,91 @@ export default function Dashboard({
           </div>
         )}
 
+        {/* Yearly Domain & Hosting Revenue */}
+        {enabledFeatures.websites && (
+          <div 
+            onClick={() => onNavigate('websites')}
+            className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-blue-400 transition-all cursor-pointer group"
+            id="kpi-domain-hosting-revenue"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-medium text-slate-400">Domain & Hosting (Yearly)</span>
+              <span className="p-1.5 bg-slate-950 rounded-lg text-blue-400">
+                <Globe className="w-4 h-4" />
+              </span>
+            </div>
+            <div className="text-xl font-bold text-white tracking-tight flex items-center gap-0.5">
+              <span className="text-sm font-normal text-slate-400">₹</span>
+              {yearlyDomainHostingRevenue.toLocaleString('en-IN')}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              Annual recurring contract value
+            </div>
+          </div>
+        )}
+
+        {/* Total Clients */}
+        <div 
+          onClick={() => onNavigate('clients')}
+          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-indigo-500 transition-all cursor-pointer group"
+          id="kpi-total-clients"
+        >
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-medium text-slate-400">Total Clients</span>
+            <span className="p-1.5 bg-slate-950 rounded-lg text-indigo-400 group-hover:bg-indigo-950 transition-colors">
+              <Users className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-semibold text-white tracking-tight">{clients.length}</div>
+          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+            <span>{activeClients} Active CRM</span>
+            <span className="text-indigo-400 group-hover:underline">Manage &rarr;</span>
+          </div>
+        </div>
+
+        {/* Active Projects */}
+        <div 
+          onClick={() => onNavigate('projects')}
+          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-emerald-500 transition-all cursor-pointer group"
+          id="kpi-active-projects"
+        >
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-medium text-slate-400">Active Projects</span>
+            <span className="p-1.5 bg-slate-950 rounded-lg text-emerald-400 group-hover:bg-emerald-950 transition-colors">
+              <Briefcase className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-semibold text-white tracking-tight">{activeProj}</div>
+          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+            <span>In Pipeline</span>
+            <span className="text-emerald-400 group-hover:underline">Kanban &rarr;</span>
+          </div>
+        </div>
+
+        {/* Completed Projects */}
+        <div 
+          onClick={() => onNavigate('projects')}
+          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-emerald-500 transition-all cursor-pointer group"
+          id="kpi-completed-projects"
+        >
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-medium text-slate-400">Completed</span>
+            <span className="p-1.5 bg-slate-950 rounded-lg text-emerald-500 group-hover:bg-emerald-950 transition-colors">
+              <CheckCircle2 className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-semibold text-white tracking-tight">{completedProj}</div>
+          <div className="text-[10px] text-emerald-400 mt-1">
+            Build deliverables finalized
+          </div>
+        </div>
+
         {/* Leads Generated */}
         {enabledFeatures.leads && (
           <div 
             onClick={() => onNavigate('leads')}
             className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-cyan-500 transition-all cursor-pointer group"
+            id="kpi-leads-generated"
           >
             <div className="flex justify-between items-center mb-2">
               <span className="text-xs font-medium text-slate-400">Leads Generated</span>
@@ -499,6 +501,7 @@ export default function Dashboard({
           <div 
             onClick={() => onNavigate('leads')}
             className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-emerald-400 transition-all cursor-pointer group"
+            id="kpi-leads-won"
           >
             <div className="flex justify-between items-center mb-2">
               <span className="text-xs font-medium text-slate-400">Leads Won</span>
@@ -512,6 +515,43 @@ export default function Dashboard({
             </div>
           </div>
         )}
+
+        {/* Pending Tasks */}
+        <div 
+          onClick={() => onNavigate('tasks')}
+          className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-amber-500 transition-all cursor-pointer group"
+          id="kpi-pending-tasks"
+        >
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-medium text-slate-400">Pending Tasks</span>
+            <span className="p-1.5 bg-slate-950 rounded-lg text-amber-400 group-hover:bg-amber-950 transition-colors">
+              <Clock className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-semibold text-white tracking-tight">{pendingTasks}</div>
+          <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+            <span>Staff Schedules</span>
+            <span className="text-amber-400 group-hover:underline">Checklist &rarr;</span>
+          </div>
+        </div>
+
+        {/* Overdue Tasks */}
+        <div 
+          onClick={() => onNavigate('tasks')}
+          className="p-4 bg-slate-900 rounded-xl border border-slate-850 shadow-sm hover:border-red-500 transition-all cursor-pointer group"
+          id="kpi-overdue-tasks"
+        >
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-medium text-slate-400">Overdue Tasks</span>
+            <span className="p-1.5 bg-slate-950 rounded-lg text-red-400 group-hover:bg-red-950 transition-colors">
+              <AlertTriangle className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-2xl font-bold text-red-400 tracking-tight">{overdueTasks}</div>
+          <div className="text-[10px] text-red-400/90 mt-1">
+            Needs priority follow ups
+          </div>
+        </div>
       </div>
 
       {/* Main Charts Modules (Dual Column layout) */}
