@@ -150,33 +150,35 @@ export const DbService = {
       if (error) {
         console.warn('[Supabase Sync] getClients failed, using local fallback:', error);
         if (isTableMissingError(error)) {
-          return getLocalBackup<Client[]>('clients', userId, []);
+          return getLocalBackup<Client[]>('clients', userId, []).filter(c => c.id !== '__system_extra_data__');
         }
         throw error;
       }
       
-      const mapped = (data || []).map(item => ({
-        id: item.id,
-        user_id: item.user_id,
-        name: item.name,
-        company: item.company || '',
-        mobile: item.mobile || '',
-        whatsapp: item.whatsapp || '',
-        email: item.email || '',
-        address: item.address || '',
-        gstNumber: item.gst_number || '',
-        website: item.website || '',
-        notes: item.notes || '',
-        createdAt: item.created_at || '',
-        status: (item.status as any) || 'Active',
-        metrics: item.metrics || { projectsCount: 0, totalBilled: 0, pendingInvoice: 0 },
-        contracts: item.contracts || [],
-        timeline: item.timeline || []
-      }));
+      const mapped = (data || [])
+        .filter(item => item.id !== '__system_extra_data__')
+        .map(item => ({
+          id: item.id,
+          user_id: item.user_id,
+          name: item.name,
+          company: item.company || '',
+          mobile: item.mobile || '',
+          whatsapp: item.whatsapp || '',
+          email: item.email || '',
+          address: item.address || '',
+          gstNumber: item.gst_number || '',
+          website: item.website || '',
+          notes: item.notes || '',
+          createdAt: item.created_at || '',
+          status: (item.status as any) || 'Active',
+          metrics: item.metrics || { projectsCount: 0, totalBilled: 0, pendingInvoice: 0 },
+          contracts: item.contracts || [],
+          timeline: item.timeline || []
+        }));
 
       // Fallback/sync check: if DB is empty, but local backup has items, use local backup and let hooks sync them to DB
       if (mapped.length === 0) {
-        const local = getLocalBackup<Client[]>('clients', userId, []);
+        const local = getLocalBackup<Client[]>('clients', userId, []).filter(c => c.id !== '__system_extra_data__');
         if (local.length > 0) {
           console.log(`[Sync] DB clients empty, syncing ${local.length} local items to DB`);
           return local;
@@ -186,15 +188,16 @@ export const DbService = {
       return mapped;
     } catch (err) {
       console.warn('DB client error, using local fallback:', err);
-      return getLocalBackup<Client[]>('clients', userId, []);
+      return getLocalBackup<Client[]>('clients', userId, []).filter(c => c.id !== '__system_extra_data__');
     }
   },
 
   async saveClients(userId: string, clients: Client[]): Promise<void> {
-    setLocalBackup('clients', userId, clients);
+    const filteredClients = clients.filter(c => c.id !== '__system_extra_data__');
+    setLocalBackup('clients', userId, filteredClients);
     try {
-      // Sync deletions (delete from DB anything not in local array)
-      const clientIds = clients.map(c => c.id);
+      // Sync deletions (delete from DB anything not in local array and NOT system extra data)
+      const clientIds = filteredClients.map(c => c.id);
       const { data: dbItems, error: fetchError } = await supabase
         .from('clients')
         .select('id')
@@ -204,7 +207,7 @@ export const DbService = {
         if (isTableMissingError(fetchError)) return;
         console.warn('[Supabase Sync] Fetching clients for delete sync failed:', fetchError);
       } else if (dbItems) {
-        const toDelete = dbItems.filter(item => !clientIds.includes(item.id));
+        const toDelete = dbItems.filter(item => item.id !== '__system_extra_data__' && !clientIds.includes(item.id));
         for (const item of toDelete) {
           const { error: delError } = await supabase.from('clients').delete().eq('id', item.id);
           if (delError) console.warn(`[Supabase Sync] failed to delete client ${item.id}:`, delError);
@@ -212,7 +215,7 @@ export const DbService = {
       }
 
       // Map to snake_case for DB
-      const dbRecords = clients.map(c => ({
+      const dbRecords = filteredClients.map(c => ({
         id: c.id,
         user_id: userId,
         name: c.name,
@@ -629,6 +632,48 @@ export const DbService = {
       await supabase.from(table).delete().eq('id', id);
     } catch (err) {
       console.warn(`Error deleting record from ${table}:`, err);
+    }
+  },
+
+  // EXTRA DATA FOR FULL SYNC
+  async getExtraData(userId: string): Promise<any> {
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('id', '__system_extra_data__')
+        .maybeSingle();
+
+      if (error) {
+        console.warn('[Supabase Sync] getExtraData failed:', error);
+        return null;
+      }
+      if (data && data.metrics) {
+        return data.metrics;
+      }
+      return null;
+    } catch (err) {
+      console.warn('DB getExtraData error:', err);
+      return null;
+    }
+  },
+
+  async saveExtraData(userId: string, extraData: any): Promise<void> {
+    try {
+      const record = {
+        id: '__system_extra_data__',
+        user_id: userId,
+        name: 'System Extra Data',
+        metrics: extraData,
+        created_at: new Date().toISOString()
+      };
+      const { error } = await supabase.from('clients').upsert(record);
+      if (error) {
+        console.warn('[Supabase Sync] saveExtraData failed:', error);
+      }
+    } catch (err) {
+      console.warn('DB saveExtraData error:', err);
     }
   }
 };

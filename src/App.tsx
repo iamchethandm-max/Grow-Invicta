@@ -132,12 +132,13 @@ export default function App() {
       setDbLoaded(false);
       console.log('[Trace App] Database loading initiated for user:', user.id);
       try {
-        const [userClients, userLeads, userProjects, userTasks, userPayments] = await Promise.all([
+        const [userClients, userLeads, userProjects, userTasks, userPayments, dbExtraData] = await Promise.all([
           DbService.getClients(user.id),
           DbService.getLeads(user.id),
           DbService.getProjects(user.id),
           DbService.getTasks(user.id),
-          DbService.getPayments(user.id)
+          DbService.getPayments(user.id),
+          DbService.getExtraData(user.id)
         ]);
 
         console.log('[Trace App] Database loading complete:', {
@@ -145,7 +146,8 @@ export default function App() {
           leadsCount: userLeads.length,
           projectsCount: userProjects.length,
           tasksCount: userTasks.length,
-          paymentsCount: userPayments.length
+          paymentsCount: userPayments.length,
+          hasExtraData: !!dbExtraData
         });
 
         let finalClients = userClients;
@@ -226,6 +228,10 @@ export default function App() {
         setPayments(finalPayments);
 
         const getLocalItem = <T,>(key: string, def: T): T => {
+          if (dbExtraData && dbExtraData[key] !== undefined) {
+            localStorage.setItem(`user_${user.id}_${key}`, JSON.stringify(dbExtraData[key]));
+            return dbExtraData[key];
+          }
           const item = localStorage.getItem(`user_${user.id}_${key}`);
           return item ? JSON.parse(item) : def;
         };
@@ -427,48 +433,29 @@ export default function App() {
     }
   }, [payments, user, dbLoaded]);
 
-  // Save sync hooks for auxiliary local-only state collections, isolated by user.id
+  // Save sync hooks for auxiliary local state collections, isolated by user.id and synced to database
   useEffect(() => {
     if (user && dbLoaded) {
       localStorage.setItem(`user_${user.id}_finances`, JSON.stringify(finances));
-    }
-  }, [finances, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
       localStorage.setItem(`user_${user.id}_reminders`, JSON.stringify(reminders));
-    }
-  }, [reminders, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
       localStorage.setItem(`user_${user.id}_auditLogs`, JSON.stringify(auditLogs));
-    }
-  }, [auditLogs, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
       localStorage.setItem(`user_${user.id}_websites`, JSON.stringify(websites));
-    }
-  }, [websites, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
       localStorage.setItem(`user_${user.id}_timeLogs`, JSON.stringify(timeLogs));
-    }
-  }, [timeLogs, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
       localStorage.setItem(`user_${user.id}_archivedItems`, JSON.stringify(archivedItems));
-    }
-  }, [archivedItems, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
       localStorage.setItem(`user_${user.id}_profileSettings`, JSON.stringify(profileSettings));
+
+      // Sync auxiliary data to database so it is shared across all devices (Desktop, Tablet, Mobile)
+      DbService.saveExtraData(user.id, {
+        finances,
+        reminders,
+        auditLogs,
+        websites,
+        timeLogs,
+        archivedItems,
+        profileSettings
+      });
     }
-  }, [profileSettings, user, dbLoaded]);
+  }, [finances, reminders, auditLogs, websites, timeLogs, archivedItems, profileSettings, user, dbLoaded]);
 
 
   useEffect(() => { saveStateToStorage('theme', theme); }, [theme]);
