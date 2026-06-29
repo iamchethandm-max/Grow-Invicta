@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, Briefcase, CheckSquare, IndianRupee, Bell, Search, 
   Terminal, ShieldCheck, HelpCircle, LogOut, ChevronRight, Menu, 
@@ -49,6 +49,7 @@ import LoginScreen from './components/LoginScreen';
 import ResetPasswordScreen from './components/ResetPasswordScreen';
 import { useAuth } from './context/AuthContext';
 import { DbService } from './supabaseService';
+import { supabase } from './supabase';
 
 export default function App() {
   const { user, session, profile, loading: authLoading, signOut } = useAuth();
@@ -68,6 +69,40 @@ export default function App() {
 
   const [dbLoaded, setDbLoaded] = useState(false);
 
+  // Track if a state change came from an external storage sync or database initial load,
+  // to avoid redundant/circular writes to Supabase.
+  const isExternalChangeRef = useRef<Record<string, boolean>>({
+    clients: true,
+    leads: true,
+    projects: true,
+    tasks: true,
+    payments: true,
+    finances: true,
+    reminders: true,
+    auditLogs: true,
+    websites: true,
+    timeLogs: true,
+    archivedItems: true,
+    profileSettings: true,
+    enabledFeatures: true
+  });
+
+  // Synchronized state refs to prevent redundant/circular database updates
+  const lastSyncedClientsRef = useRef<string>('');
+  const lastSyncedLeadsRef = useRef<string>('');
+  const lastSyncedProjectsRef = useRef<string>('');
+  const lastSyncedTasksRef = useRef<string>('');
+  const lastSyncedPaymentsRef = useRef<string>('');
+  const lastSyncedFinancesRef = useRef<string>('');
+  const lastSyncedRemindersRef = useRef<string>('');
+  const lastSyncedAuditLogsRef = useRef<string>('');
+  const lastSyncedWebsitesRef = useRef<string>('');
+  const lastSyncedTimeLogsRef = useRef<string>('');
+  const lastSyncedArchivedItemsRef = useRef<string>('');
+  const lastSyncedProfileSettingsRef = useRef<string>('');
+  const lastSyncedCalendarEventsRef = useRef<string>('');
+  const lastSyncedReportsRef = useRef<string>('');
+
   // States initialized empty, populated by useEffect
   const [clients, setClients] = useState<Client[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -80,6 +115,8 @@ export default function App() {
   const [websites, setWebsites] = useState<Website[]>([]);
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   const [archivedItems, setArchivedItems] = useState<ArchivedItem[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
+  const [reports, setReports] = useState<any[]>([]);
   const [profileSettings, setProfileSettings] = useState<ProfileSettings>({
     companyName: 'GrowInvicta',
     companyLogoUrl: '',
@@ -114,6 +151,8 @@ export default function App() {
       setWebsites([]);
       setTimeLogs([]);
       setArchivedItems([]);
+      setCalendarEvents([]);
+      setReports([]);
       setProfileSettings({
         companyName: 'GrowInvicta',
         companyLogoUrl: '',
@@ -132,13 +171,38 @@ export default function App() {
       setDbLoaded(false);
       console.log('[Trace App] Database loading initiated for user:', user.id);
       try {
-        const [userClients, userLeads, userProjects, userTasks, userPayments, dbExtraData] = await Promise.all([
+        const [
+          userClients,
+          userLeads,
+          userProjects,
+          userTasks,
+          userPayments,
+          dbExtraData,
+          userFinances,
+          userWebsites,
+          userTimeLogs,
+          userArchivedItems,
+          userReminders,
+          userProfileSettings,
+          userAuditLogs,
+          userCalendarEvents,
+          userReports
+        ] = await Promise.all([
           DbService.getClients(user.id),
           DbService.getLeads(user.id),
           DbService.getProjects(user.id),
           DbService.getTasks(user.id),
           DbService.getPayments(user.id),
-          DbService.getExtraData(user.id)
+          DbService.getExtraData(user.id),
+          DbService.getFinances(user.id),
+          DbService.getWebsites(user.id),
+          DbService.getTimeLogs(user.id),
+          DbService.getArchivedItems(user.id),
+          DbService.getReminders(user.id),
+          DbService.getProfileSettings(user.id),
+          DbService.getAuditLogs(user.id),
+          DbService.getCalendarEvents(user.id),
+          DbService.getReports(user.id)
         ]);
 
         console.log('[Trace App] Database loading complete:', {
@@ -147,6 +211,15 @@ export default function App() {
           projectsCount: userProjects.length,
           tasksCount: userTasks.length,
           paymentsCount: userPayments.length,
+          financesCount: userFinances?.length || 0,
+          websitesCount: userWebsites?.length || 0,
+          timeLogsCount: userTimeLogs?.length || 0,
+          archivedItemsCount: userArchivedItems?.length || 0,
+          remindersCount: userReminders?.length || 0,
+          calendarEventsCount: userCalendarEvents?.length || 0,
+          reportsCount: userReports?.length || 0,
+          hasProfileSettings: !!userProfileSettings,
+          auditLogsCount: userAuditLogs?.length || 0,
           hasExtraData: !!dbExtraData
         });
 
@@ -222,13 +295,26 @@ export default function App() {
         }
 
         setClients(finalClients);
-        setLeads(finalLeads);
-        setProjects(finalProjects);
-        setTasks(finalTasks);
-        setPayments(finalPayments);
+        lastSyncedClientsRef.current = JSON.stringify(finalClients);
 
-        const getLocalItem = <T,>(key: string, def: T): T => {
-          if (dbExtraData && dbExtraData[key] !== undefined) {
+        setLeads(finalLeads);
+        lastSyncedLeadsRef.current = JSON.stringify(finalLeads);
+
+        setProjects(finalProjects);
+        lastSyncedProjectsRef.current = JSON.stringify(finalProjects);
+
+        setTasks(finalTasks);
+        lastSyncedTasksRef.current = JSON.stringify(finalTasks);
+
+        setPayments(finalPayments);
+        lastSyncedPaymentsRef.current = JSON.stringify(finalPayments);
+
+        const resolveCollection = <T,>(key: string, dbData: T[] | null, def: T[]): T[] => {
+          if (dbData && dbData.length > 0) {
+            localStorage.setItem(`user_${user.id}_${key}`, JSON.stringify(dbData));
+            return dbData;
+          }
+          if (dbExtraData && dbExtraData[key] !== undefined && dbExtraData[key].length > 0) {
             localStorage.setItem(`user_${user.id}_${key}`, JSON.stringify(dbExtraData[key]));
             return dbExtraData[key];
           }
@@ -236,12 +322,37 @@ export default function App() {
           return item ? JSON.parse(item) : def;
         };
 
-        setFinances(getLocalItem('finances', isNewSignup ? [] : INITIAL_FINANCE_LETTERS));
-        setReminders(getLocalItem('reminders', isNewSignup ? [] : INITIAL_REMINDERS));
-        setAuditLogs(getLocalItem('auditLogs', isNewSignup ? [] : INITIAL_AUDIT_LOGS));
-        setWebsites(getLocalItem('websites', isNewSignup ? [] : INITIAL_WEBSITES));
-        setTimeLogs(getLocalItem('timeLogs', isNewSignup ? [] : INITIAL_TIME_LOGS));
-        setArchivedItems(getLocalItem('archivedItems', []));
+        const finalFinances = resolveCollection('finances', userFinances, isNewSignup ? [] : INITIAL_FINANCE_LETTERS);
+        setFinances(finalFinances);
+        lastSyncedFinancesRef.current = JSON.stringify(finalFinances);
+
+        const finalReminders = resolveCollection('reminders', userReminders, isNewSignup ? [] : INITIAL_REMINDERS);
+        setReminders(finalReminders);
+        lastSyncedRemindersRef.current = JSON.stringify(finalReminders);
+
+        const finalAuditLogs = resolveCollection('auditLogs', userAuditLogs, isNewSignup ? [] : INITIAL_AUDIT_LOGS);
+        setAuditLogs(finalAuditLogs);
+        lastSyncedAuditLogsRef.current = JSON.stringify(finalAuditLogs);
+
+        const finalWebsites = resolveCollection('websites', userWebsites, isNewSignup ? [] : INITIAL_WEBSITES);
+        setWebsites(finalWebsites);
+        lastSyncedWebsitesRef.current = JSON.stringify(finalWebsites);
+
+        const finalTimeLogs = resolveCollection('timeLogs', userTimeLogs, isNewSignup ? [] : INITIAL_TIME_LOGS);
+        setTimeLogs(finalTimeLogs);
+        lastSyncedTimeLogsRef.current = JSON.stringify(finalTimeLogs);
+
+        const finalArchivedItems = resolveCollection('archivedItems', userArchivedItems, []);
+        setArchivedItems(finalArchivedItems);
+        lastSyncedArchivedItemsRef.current = JSON.stringify(finalArchivedItems);
+
+        const finalCalendarEvents = resolveCollection('calendar', userCalendarEvents, []);
+        setCalendarEvents(finalCalendarEvents);
+        lastSyncedCalendarEventsRef.current = JSON.stringify(finalCalendarEvents);
+
+        const finalReports = resolveCollection('reports', userReports, []);
+        setReports(finalReports);
+        lastSyncedReportsRef.current = JSON.stringify(finalReports);
 
         const defaultFeatures = {
           leads: false,
@@ -250,50 +361,75 @@ export default function App() {
           websites: false,
           calendar: false
         };
-        setEnabledFeatures(getLocalItem('enabledFeatures', defaultFeatures));
+        let finalFeatures = defaultFeatures;
+        if (dbExtraData && dbExtraData.websites !== undefined) {
+          finalFeatures = dbExtraData;
+          localStorage.setItem(`user_${user.id}_enabledFeatures`, JSON.stringify(finalFeatures));
+        } else {
+          const item = localStorage.getItem(`user_${user.id}_enabledFeatures`) || localStorage.getItem('enabledFeatures');
+          if (item) {
+            try {
+              finalFeatures = JSON.parse(item);
+            } catch (e) {}
+          }
+        }
+        setEnabledFeatures(finalFeatures);
 
-        const compName = profile?.company_name || 'My SaaS Business';
-        const fName = profile?.full_name || 'User';
-
-        const storedSettings = getLocalItem('profileSettings', {
-          companyName: compName,
-          companyLogoUrl: '',
-          personalName: fName,
-          email: user.email || '',
-          phone: '',
-          role: 'Managing Director & CEO',
-          address: '',
-          timezone: 'Asia/Kolkata (IST)',
-          accentColor: 'indigo'
-        });
+        let finalSettings: ProfileSettings;
+        if (userProfileSettings) {
+          finalSettings = userProfileSettings;
+        } else if (dbExtraData && dbExtraData['profileSettings']) {
+          finalSettings = dbExtraData['profileSettings'];
+        } else {
+          const compName = profile?.company_name || 'My SaaS Business';
+          const fName = profile?.full_name || 'User';
+          const localItem = localStorage.getItem(`user_${user.id}_profileSettings`) || localStorage.getItem('profileSettings');
+          let parsedLocal = null;
+          if (localItem) {
+            try {
+              parsedLocal = JSON.parse(localItem);
+            } catch (e) {}
+          }
+          finalSettings = parsedLocal || {
+            companyName: compName,
+            companyLogoUrl: '',
+            personalName: fName,
+            email: user.email || '',
+            phone: '',
+            role: 'Managing Director & CEO',
+            address: '',
+            timezone: 'Asia/Kolkata (IST)',
+            accentColor: 'indigo'
+          };
+        }
 
         const metaFullName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
         const metaCompanyName = user?.user_metadata?.company_name || '';
 
-        // Always sync personalName and companyName with the fetched Supabase profile database values or auth metadata
         if (profile) {
           if (profile.full_name && profile.full_name !== 'New User' && profile.full_name !== 'User') {
-            storedSettings.personalName = profile.full_name;
+            finalSettings.personalName = profile.full_name;
           } else if (metaFullName && metaFullName !== 'New User' && metaFullName !== 'User') {
-            storedSettings.personalName = metaFullName;
+            finalSettings.personalName = metaFullName;
           }
 
           if (profile.company_name && profile.company_name !== 'GrowInvicta Agency Client') {
-            storedSettings.companyName = profile.company_name;
+            finalSettings.companyName = profile.company_name;
           } else if (metaCompanyName && metaCompanyName !== 'GrowInvicta Agency Client') {
-            storedSettings.companyName = metaCompanyName;
+            finalSettings.companyName = metaCompanyName;
           }
         } else {
           if (metaFullName && metaFullName !== 'New User' && metaFullName !== 'User') {
-            storedSettings.personalName = metaFullName;
+            finalSettings.personalName = metaFullName;
           }
           if (metaCompanyName && metaCompanyName !== 'GrowInvicta Agency Client') {
-            storedSettings.companyName = metaCompanyName;
+            finalSettings.companyName = metaCompanyName;
           }
         }
 
-        setProfileSettings(storedSettings);
-        setCurrentUsername(storedSettings.personalName || fName);
+        setProfileSettings(finalSettings);
+        lastSyncedProfileSettingsRef.current = JSON.stringify(finalSettings);
+        setCurrentUsername(finalSettings.personalName || 'User');
 
         // Check for App Updated notification on login
         const updateNotifiedKey = `app_updated_notified_v2_${user.id}`;
@@ -417,59 +553,244 @@ export default function App() {
   // Save sync hooks for Supabase CRM tables
   useEffect(() => {
     if (user && dbLoaded) {
-      DbService.saveClients(user.id, clients);
+      const str = JSON.stringify(clients);
+      if (str !== lastSyncedClientsRef.current) {
+        lastSyncedClientsRef.current = str;
+        DbService.saveClients(user.id, clients);
+      }
     }
   }, [clients, user, dbLoaded]);
 
   useEffect(() => {
     if (user && dbLoaded) {
-      DbService.saveLeads(user.id, leads);
+      const str = JSON.stringify(leads);
+      if (str !== lastSyncedLeadsRef.current) {
+        lastSyncedLeadsRef.current = str;
+        DbService.saveLeads(user.id, leads);
+      }
     }
   }, [leads, user, dbLoaded]);
 
   useEffect(() => {
     if (user && dbLoaded) {
-      DbService.saveProjects(user.id, projects);
+      const str = JSON.stringify(projects);
+      if (str !== lastSyncedProjectsRef.current) {
+        lastSyncedProjectsRef.current = str;
+        DbService.saveProjects(user.id, projects);
+      }
     }
   }, [projects, user, dbLoaded]);
 
   useEffect(() => {
     if (user && dbLoaded) {
-      DbService.saveTasks(user.id, tasks);
+      const str = JSON.stringify(tasks);
+      if (str !== lastSyncedTasksRef.current) {
+        lastSyncedTasksRef.current = str;
+        DbService.saveTasks(user.id, tasks);
+      }
     }
   }, [tasks, user, dbLoaded]);
 
   useEffect(() => {
     if (user && dbLoaded) {
-      DbService.savePayments(user.id, payments);
+      const str = JSON.stringify(payments);
+      if (str !== lastSyncedPaymentsRef.current) {
+        lastSyncedPaymentsRef.current = str;
+        DbService.savePayments(user.id, payments);
+      }
     }
   }, [payments, user, dbLoaded]);
 
-  // Save sync hooks for auxiliary local state collections, isolated by user.id and synced to database
   useEffect(() => {
     if (user && dbLoaded) {
-      localStorage.setItem(`user_${user.id}_finances`, JSON.stringify(finances));
-      localStorage.setItem(`user_${user.id}_reminders`, JSON.stringify(reminders));
-      localStorage.setItem(`user_${user.id}_auditLogs`, JSON.stringify(auditLogs));
-      localStorage.setItem(`user_${user.id}_websites`, JSON.stringify(websites));
-      localStorage.setItem(`user_${user.id}_timeLogs`, JSON.stringify(timeLogs));
-      localStorage.setItem(`user_${user.id}_archivedItems`, JSON.stringify(archivedItems));
-      localStorage.setItem(`user_${user.id}_profileSettings`, JSON.stringify(profileSettings));
-      localStorage.setItem(`user_${user.id}_enabledFeatures`, JSON.stringify(enabledFeatures));
-
-      // Sync auxiliary data to database so it is shared across all devices (Desktop, Tablet, Mobile)
-      DbService.saveExtraData(user.id, {
-        finances,
-        reminders,
-        auditLogs,
-        websites,
-        timeLogs,
-        archivedItems,
-        profileSettings,
-        enabledFeatures
-      });
+      const str = JSON.stringify(finances);
+      if (str !== lastSyncedFinancesRef.current) {
+        lastSyncedFinancesRef.current = str;
+        localStorage.setItem(`user_${user.id}_finances`, str);
+        DbService.saveFinances(user.id, finances);
+      }
     }
-  }, [finances, reminders, auditLogs, websites, timeLogs, archivedItems, profileSettings, enabledFeatures, user, dbLoaded]);
+  }, [finances, user, dbLoaded]);
+
+  useEffect(() => {
+    if (user && dbLoaded) {
+      const str = JSON.stringify(reminders);
+      if (str !== lastSyncedRemindersRef.current) {
+        lastSyncedRemindersRef.current = str;
+        localStorage.setItem(`user_${user.id}_reminders`, str);
+        DbService.saveReminders(user.id, reminders);
+      }
+    }
+  }, [reminders, user, dbLoaded]);
+
+  useEffect(() => {
+    if (user && dbLoaded) {
+      const str = JSON.stringify(auditLogs);
+      if (str !== lastSyncedAuditLogsRef.current) {
+        lastSyncedAuditLogsRef.current = str;
+        localStorage.setItem(`user_${user.id}_auditLogs`, str);
+        DbService.saveAuditLogs(user.id, auditLogs);
+      }
+    }
+  }, [auditLogs, user, dbLoaded]);
+
+  useEffect(() => {
+    if (user && dbLoaded) {
+      const str = JSON.stringify(websites);
+      if (str !== lastSyncedWebsitesRef.current) {
+        lastSyncedWebsitesRef.current = str;
+        localStorage.setItem(`user_${user.id}_websites`, str);
+        DbService.saveWebsites(user.id, websites);
+      }
+    }
+  }, [websites, user, dbLoaded]);
+
+  useEffect(() => {
+    if (user && dbLoaded) {
+      const str = JSON.stringify(timeLogs);
+      if (str !== lastSyncedTimeLogsRef.current) {
+        lastSyncedTimeLogsRef.current = str;
+        localStorage.setItem(`user_${user.id}_timeLogs`, str);
+        DbService.saveTimeLogs(user.id, timeLogs);
+      }
+    }
+  }, [timeLogs, user, dbLoaded]);
+
+  useEffect(() => {
+    if (user && dbLoaded) {
+      const str = JSON.stringify(archivedItems);
+      if (str !== lastSyncedArchivedItemsRef.current) {
+        lastSyncedArchivedItemsRef.current = str;
+        localStorage.setItem(`user_${user.id}_archivedItems`, str);
+        DbService.saveArchivedItems(user.id, archivedItems);
+      }
+    }
+  }, [archivedItems, user, dbLoaded]);
+
+  useEffect(() => {
+    if (user && dbLoaded) {
+      const str = JSON.stringify(profileSettings);
+      if (str !== lastSyncedProfileSettingsRef.current) {
+        lastSyncedProfileSettingsRef.current = str;
+        localStorage.setItem(`user_${user.id}_profileSettings`, str);
+        DbService.saveProfileSettings(user.id, profileSettings);
+      }
+    }
+  }, [profileSettings, user, dbLoaded]);
+
+  useEffect(() => {
+    if (user && dbLoaded) {
+      const str = JSON.stringify(calendarEvents);
+      if (str !== lastSyncedCalendarEventsRef.current) {
+        lastSyncedCalendarEventsRef.current = str;
+        localStorage.setItem(`user_${user.id}_calendar`, str);
+        DbService.saveCalendarEvents(user.id, calendarEvents);
+      }
+    }
+  }, [calendarEvents, user, dbLoaded]);
+
+  useEffect(() => {
+    if (user && dbLoaded) {
+      const str = JSON.stringify(reports);
+      if (str !== lastSyncedReportsRef.current) {
+        lastSyncedReportsRef.current = str;
+        localStorage.setItem(`user_${user.id}_reports`, str);
+        DbService.saveReports(user.id, reports);
+      }
+    }
+  }, [reports, user, dbLoaded]);
+
+  useEffect(() => {
+    if (user && dbLoaded) {
+      const str = JSON.stringify(enabledFeatures);
+      localStorage.setItem(`user_${user.id}_enabledFeatures`, str);
+      DbService.saveExtraData(user.id, enabledFeatures);
+    }
+  }, [enabledFeatures, user, dbLoaded]);
+
+  // Supabase Real-time Synchronization across different sessions/devices
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('supabase-crm-realtime-global')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public' },
+        async (payload) => {
+          console.log('[Realtime Sync] Database change payload:', payload);
+          const tableName = payload.table;
+          try {
+            if (tableName === 'clients') {
+              const fresh = await DbService.getClients(user.id);
+              lastSyncedClientsRef.current = JSON.stringify(fresh);
+              setClients(fresh);
+            } else if (tableName === 'leads') {
+              const fresh = await DbService.getLeads(user.id);
+              lastSyncedLeadsRef.current = JSON.stringify(fresh);
+              setLeads(fresh);
+            } else if (tableName === 'projects') {
+              const fresh = await DbService.getProjects(user.id);
+              lastSyncedProjectsRef.current = JSON.stringify(fresh);
+              setProjects(fresh);
+            } else if (tableName === 'tasks') {
+              const fresh = await DbService.getTasks(user.id);
+              lastSyncedTasksRef.current = JSON.stringify(fresh);
+              setTasks(fresh);
+            } else if (tableName === 'payments') {
+              const fresh = await DbService.getPayments(user.id);
+              lastSyncedPaymentsRef.current = JSON.stringify(fresh);
+              setPayments(fresh);
+            } else if (tableName === 'finances') {
+              const fresh = await DbService.getFinances(user.id);
+              lastSyncedFinancesRef.current = JSON.stringify(fresh);
+              setFinances(fresh);
+            } else if (tableName === 'websites') {
+              const fresh = await DbService.getWebsites(user.id);
+              lastSyncedWebsitesRef.current = JSON.stringify(fresh);
+              setWebsites(fresh);
+            } else if (tableName === 'time_logs') {
+              const fresh = await DbService.getTimeLogs(user.id);
+              lastSyncedTimeLogsRef.current = JSON.stringify(fresh);
+              setTimeLogs(fresh);
+            } else if (tableName === 'archived_items') {
+              const fresh = await DbService.getArchivedItems(user.id);
+              lastSyncedArchivedItemsRef.current = JSON.stringify(fresh);
+              setArchivedItems(fresh);
+            } else if (tableName === 'reminders') {
+              const fresh = await DbService.getReminders(user.id);
+              lastSyncedRemindersRef.current = JSON.stringify(fresh);
+              setReminders(fresh);
+            } else if (tableName === 'profile_settings') {
+              const fresh = await DbService.getProfileSettings(user.id);
+              if (fresh) {
+                lastSyncedProfileSettingsRef.current = JSON.stringify(fresh);
+                setProfileSettings(fresh);
+              }
+            } else if (tableName === 'audit_logs') {
+              const fresh = await DbService.getAuditLogs(user.id);
+              lastSyncedAuditLogsRef.current = JSON.stringify(fresh);
+              setAuditLogs(fresh);
+            } else if (tableName === 'calendar') {
+              const fresh = await DbService.getCalendarEvents(user.id);
+              lastSyncedCalendarEventsRef.current = JSON.stringify(fresh);
+              setCalendarEvents(fresh);
+            } else if (tableName === 'reports') {
+              const fresh = await DbService.getReports(user.id);
+              lastSyncedReportsRef.current = JSON.stringify(fresh);
+              setReports(fresh);
+            }
+          } catch (err) {
+            console.warn('[Realtime Sync] Failed to retrieve fresh data for:', tableName, err);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, dbLoaded]);
 
 
   useEffect(() => { saveStateToStorage('theme', theme); }, [theme]);
@@ -497,32 +818,45 @@ export default function App() {
       
       // CRM Main Tables Sync
       if (e.key === `supabase_user_${userId}_clients`) {
+        isExternalChangeRef.current['clients'] = true;
         setClients(parsed);
       } else if (e.key === `supabase_user_${userId}_leads`) {
+        isExternalChangeRef.current['leads'] = true;
         setLeads(parsed);
       } else if (e.key === `supabase_user_${userId}_projects`) {
+        isExternalChangeRef.current['projects'] = true;
         setProjects(parsed);
       } else if (e.key === `supabase_user_${userId}_tasks`) {
+        isExternalChangeRef.current['tasks'] = true;
         setTasks(parsed);
       } else if (e.key === `supabase_user_${userId}_payments`) {
+        isExternalChangeRef.current['payments'] = true;
         setPayments(parsed);
       }
       // CRM Auxiliary Local Tables Sync
       else if (e.key === `user_${userId}_finances`) {
+        isExternalChangeRef.current['finances'] = true;
         setFinances(parsed);
       } else if (e.key === `user_${userId}_reminders`) {
+        isExternalChangeRef.current['reminders'] = true;
         setReminders(parsed);
       } else if (e.key === `user_${userId}_auditLogs`) {
+        isExternalChangeRef.current['auditLogs'] = true;
         setAuditLogs(parsed);
       } else if (e.key === `user_${userId}_websites`) {
+        isExternalChangeRef.current['websites'] = true;
         setWebsites(parsed);
       } else if (e.key === `user_${userId}_timeLogs`) {
+        isExternalChangeRef.current['timeLogs'] = true;
         setTimeLogs(parsed);
       } else if (e.key === `user_${userId}_archivedItems`) {
+        isExternalChangeRef.current['archivedItems'] = true;
         setArchivedItems(parsed);
       } else if (e.key === `user_${userId}_profileSettings`) {
+        isExternalChangeRef.current['profileSettings'] = true;
         setProfileSettings(parsed);
       } else if (e.key === 'enabledFeatures' || e.key === `user_${userId}_enabledFeatures`) {
+        isExternalChangeRef.current['enabledFeatures'] = true;
         setEnabledFeatures(parsed);
       }
     };
