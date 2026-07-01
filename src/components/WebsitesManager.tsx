@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { Website, Client } from '../types';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
-import { formatIndianDate } from '../utils/dateUtils';
+import { formatIndianDate, normalizeToYYYYMMDD } from '../utils/dateUtils';
 
 
 interface WebsitesManagerProps {
@@ -57,6 +57,8 @@ export default function WebsitesManager({
   const [formStatus, setFormStatus] = useState<Website['status']>('Active');
   const [formNotes, setFormNotes] = useState('');
   const [formClientId, setFormClientId] = useState('');
+  const [formHostingReminderDays, setFormHostingReminderDays] = useState<number>(30);
+  const [formDomainReminderDays, setFormDomainReminderDays] = useState<number>(30);
 
   // Smart CSV Import States
   const [showImportPanel, setShowImportPanel] = useState(false);
@@ -156,7 +158,9 @@ export default function WebsitesManager({
         domainBillDate: ['domainbill', 'domaindate', 'domaindue', 'registrardate', 'domainbilldate', 'domaindue', 'domainrenewal'],
         notes: ['note', 'notes', 'desc', 'description', 'comment', 'info', 'credential', 'credentials', 'detail', 'details', 'about', 'remarks'],
         status: ['status', 'active', 'state', 'condition'],
-        clientName: ['client', 'owner', 'customer', 'contact', 'user', 'clientname', 'clientname', 'company', 'firm']
+        clientName: ['client', 'owner', 'customer', 'contact', 'user', 'clientname', 'clientname', 'company', 'firm'],
+        hostingReminderDays: ['hostingreminder', 'hostingreminderdays', 'hostingalert', 'hostreminder', 'hostalert'],
+        domainReminderDays: ['domainreminder', 'domainreminderdays', 'domainalert', 'regreminder', 'regalert']
       };
 
       const fieldToColumnIndex: Record<string, number> = {};
@@ -209,12 +213,14 @@ export default function WebsitesManager({
 
         const rawHostingProvider = getValue('hostingProvider', 'Hostinger Share Node');
         const rawHostingPrice = parseFloat(getValue('hostingPrice', '0').replace(/[^0-9.]/g, '')) || 0;
-        const rawHostingBillDate = getValue('hostingBillDate', '2027-06-25');
+        const rawHostingBillDate = normalizeToYYYYMMDD(getValue('hostingBillDate', '2027-06-25'));
         const rawDomainRegistrar = getValue('domainRegistrar', 'Namecheap');
         const rawDomainPrice = parseFloat(getValue('domainPrice', '0').replace(/[^0-9.]/g, '')) || 0;
-        const rawDomainBillDate = getValue('domainBillDate', '2027-06-25');
+        const rawDomainBillDate = normalizeToYYYYMMDD(getValue('domainBillDate', '2027-06-25'));
         const rawNotes = getValue('notes', '');
         const clientNameField = getValue('clientName', '');
+        const rawHostingRem = parseInt(getValue('hostingReminderDays', '30').replace(/[^0-9]/g, '')) || 30;
+        const rawDomainRem = parseInt(getValue('domainReminderDays', '30').replace(/[^0-9]/g, '')) || 30;
 
         let matchedClientId = '';
         if (clientNameField) {
@@ -250,7 +256,9 @@ export default function WebsitesManager({
           status: parsedStatus,
           notes: rawNotes,
           clientId: matchedClientId || undefined,
-          clientNameField: clientNameField || undefined
+          clientNameField: clientNameField || undefined,
+          hostingReminderDays: [7, 10, 15, 30].includes(rawHostingRem) ? rawHostingRem : 30,
+          domainReminderDays: [7, 10, 15, 30].includes(rawDomainRem) ? rawDomainRem : 30
         });
       });
 
@@ -323,7 +331,9 @@ export default function WebsitesManager({
         domainBillDate: web.domainBillDate,
         status: web.status,
         notes: web.notes,
-        clientId: web.clientId
+        clientId: web.clientId,
+        hostingReminderDays: web.hostingReminderDays,
+        domainReminderDays: web.domainReminderDays
       };
       onAddWebsite(cleanedWeb);
     });
@@ -397,13 +407,15 @@ export default function WebsitesManager({
       url: formUrl.startsWith('http') ? formUrl : `https://${formUrl}`,
       hostingProvider: formHostingProvider || 'Hostinger Share Node',
       hostingPrice: Number(formHostingPrice) || 0,
-      hostingBillDate: formHostingBillDate,
+      hostingBillDate: normalizeToYYYYMMDD(formHostingBillDate),
       domainRegistrar: formDomainRegistrar || 'Namecheap',
       domainPrice: Number(formDomainPrice) || 0,
-      domainBillDate: formDomainBillDate,
+      domainBillDate: normalizeToYYYYMMDD(formDomainBillDate),
       status: formStatus,
       notes: formNotes,
-      clientId: formClientId || undefined
+      clientId: formClientId || undefined,
+      hostingReminderDays: formHostingReminderDays,
+      domainReminderDays: formDomainReminderDays
     };
 
     onAddWebsite(newWeb);
@@ -419,13 +431,15 @@ export default function WebsitesManager({
     setFormUrl(w.url);
     setFormHostingProvider(w.hostingProvider);
     setFormHostingPrice(w.hostingPrice);
-    setFormHostingBillDate(w.hostingBillDate);
+    setFormHostingBillDate(normalizeToYYYYMMDD(w.hostingBillDate));
     setFormDomainRegistrar(w.domainRegistrar);
     setFormDomainPrice(w.domainPrice);
-    setFormDomainBillDate(w.domainBillDate);
+    setFormDomainBillDate(normalizeToYYYYMMDD(w.domainBillDate));
     setFormStatus(w.status);
     setFormNotes(w.notes);
     setFormClientId(w.clientId || '');
+    setFormHostingReminderDays(w.hostingReminderDays || 30);
+    setFormDomainReminderDays(w.domainReminderDays || 30);
     setShowEditModal(true);
   };
 
@@ -440,13 +454,15 @@ export default function WebsitesManager({
       url: formUrl.startsWith('http') ? formUrl : `https://${formUrl}`,
       hostingProvider: formHostingProvider,
       hostingPrice: Number(formHostingPrice) || 0,
-      hostingBillDate: formHostingBillDate,
+      hostingBillDate: normalizeToYYYYMMDD(formHostingBillDate),
       domainRegistrar: formDomainRegistrar,
       domainPrice: Number(formDomainPrice) || 0,
-      domainBillDate: formDomainBillDate,
+      domainBillDate: normalizeToYYYYMMDD(formDomainBillDate),
       status: formStatus,
       notes: formNotes,
-      clientId: formClientId || undefined
+      clientId: formClientId || undefined,
+      hostingReminderDays: formHostingReminderDays,
+      domainReminderDays: formDomainReminderDays
     };
 
     onEditWebsite(updatedWeb);
@@ -473,6 +489,8 @@ export default function WebsitesManager({
     setFormStatus('Active');
     setFormNotes('');
     setFormClientId('');
+    setFormHostingReminderDays(30);
+    setFormDomainReminderDays(30);
   };
 
   // Metrics calculations
@@ -1345,14 +1363,29 @@ export default function WebsitesManager({
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-slate-500 font-medium block">Hosting Renewal Due Date</label>
-                    <input
-                      type="date"
-                      value={formHostingBillDate}
-                      onChange={e => setFormHostingBillDate(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px] font-mono"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-slate-500 font-medium block">Hosting Renewal Due Date</label>
+                      <input
+                        type="date"
+                        value={formHostingBillDate}
+                        onChange={e => setFormHostingBillDate(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px] font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-slate-500 font-medium block">Renewal Reminder Alert</label>
+                      <select
+                        value={formHostingReminderDays}
+                        onChange={e => setFormHostingReminderDays(Number(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px]"
+                      >
+                        <option value={7}>7 days before</option>
+                        <option value={10}>10 days before</option>
+                        <option value={15}>15 days before</option>
+                        <option value={30}>30 days before</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -1385,14 +1418,29 @@ export default function WebsitesManager({
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-slate-500 font-medium block">Domain Renewal Due Date</label>
-                    <input
-                      type="date"
-                      value={formDomainBillDate}
-                      onChange={e => setFormDomainBillDate(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px] font-mono"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-slate-500 font-medium block">Domain Renewal Due Date</label>
+                      <input
+                        type="date"
+                        value={formDomainBillDate}
+                        onChange={e => setFormDomainBillDate(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px] font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-slate-500 font-medium block">Renewal Reminder Alert</label>
+                      <select
+                        value={formDomainReminderDays}
+                        onChange={e => setFormDomainReminderDays(Number(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px]"
+                      >
+                        <option value={7}>7 days before</option>
+                        <option value={10}>10 days before</option>
+                        <option value={15}>15 days before</option>
+                        <option value={30}>30 days before</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -1534,14 +1582,29 @@ export default function WebsitesManager({
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-slate-500 font-medium block">Hosting Renewal Due Date</label>
-                    <input
-                      type="date"
-                      value={formHostingBillDate}
-                      onChange={e => setFormHostingBillDate(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px] font-mono"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-slate-500 font-medium block">Hosting Renewal Due Date</label>
+                      <input
+                        type="date"
+                        value={formHostingBillDate}
+                        onChange={e => setFormHostingBillDate(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px] font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-slate-500 font-medium block">Renewal Reminder Alert</label>
+                      <select
+                        value={formHostingReminderDays}
+                        onChange={e => setFormHostingReminderDays(Number(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px]"
+                      >
+                        <option value={7}>7 days before</option>
+                        <option value={10}>10 days before</option>
+                        <option value={15}>15 days before</option>
+                        <option value={30}>30 days before</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -1572,14 +1635,29 @@ export default function WebsitesManager({
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-slate-500 font-medium block">Domain Renewal Due Date</label>
-                    <input
-                      type="date"
-                      value={formDomainBillDate}
-                      onChange={e => setFormDomainBillDate(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px] font-mono"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-slate-500 font-medium block">Domain Renewal Due Date</label>
+                      <input
+                        type="date"
+                        value={formDomainBillDate}
+                        onChange={e => setFormDomainBillDate(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px] font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-slate-500 font-medium block">Renewal Reminder Alert</label>
+                      <select
+                        value={formDomainReminderDays}
+                        onChange={e => setFormDomainReminderDays(Number(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500 text-[11px]"
+                      >
+                        <option value={7}>7 days before</option>
+                        <option value={10}>10 days before</option>
+                        <option value={15}>15 days before</option>
+                        <option value={30}>30 days before</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 

@@ -42,6 +42,7 @@ import HowToUse from './components/HowToUse';
 import AddNewFeature from './components/AddNewFeature';
 import DataImport from './components/DataImport';
 import { triggerExcelBackupDownload } from './utils/excelBackup';
+import { subtractDays } from './utils/dateUtils';
 import AIAssistant from './components/AIAssistant';
 
 
@@ -232,26 +233,8 @@ export default function App() {
         const userEmail = user.email ? user.email.toLowerCase() : '';
         const isNewSignup = localStorage.getItem(`is_new_signup_${userEmail}`) === 'true';
 
-        // Auto-seed for fresh user context if completely empty
-        const seededMark = localStorage.getItem(`supabase_user_${user.id}_seeded`);
-        if (!isNewSignup && !seededMark && userClients.length === 0 && userLeads.length === 0 && userProjects.length === 0 && userTasks.length === 0 && userPayments.length === 0) {
-          finalClients = INITIAL_CLIENTS.map(c => ({ ...c, user_id: user.id }));
-          finalLeads = INITIAL_LEADS.map(l => ({ ...l, user_id: user.id }));
-          finalProjects = INITIAL_PROJECTS.map(p => ({ ...p, user_id: user.id }));
-          finalTasks = INITIAL_TASKS.map(t => ({ ...t, user_id: user.id }));
-          finalPayments = INITIAL_PAYMENTS.map(p => ({ ...p, user_id: user.id }));
-
-          await Promise.all([
-            DbService.saveClients(user.id, finalClients),
-            DbService.saveLeads(user.id, finalLeads),
-            DbService.saveProjects(user.id, finalProjects),
-            DbService.saveTasks(user.id, finalTasks),
-            DbService.savePayments(user.id, finalPayments)
-          ]);
-          localStorage.setItem(`supabase_user_${user.id}_seeded`, 'true');
-        } else if (isNewSignup) {
+        if (isNewSignup) {
           localStorage.removeItem(`is_new_signup_${userEmail}`);
-          localStorage.setItem(`supabase_user_${user.id}_seeded`, 'true');
           
           const signupFeatures = {
             leads: false,
@@ -262,36 +245,14 @@ export default function App() {
           };
           localStorage.setItem('enabledFeatures', JSON.stringify(signupFeatures));
           setEnabledFeatures(signupFeatures);
-          
-          if (userClients.length === 0 && userLeads.length === 0 && userProjects.length === 0 && userTasks.length === 0 && userPayments.length === 0) {
-            finalClients = INITIAL_CLIENTS.slice(0, 4).map(c => ({ ...c, user_id: user.id }));
-            finalLeads = [];
-            finalProjects = [];
-            finalTasks = INITIAL_TASKS.slice(0, 4).map(t => ({ ...t, user_id: user.id }));
-            finalPayments = [];
 
-            await Promise.all([
-              DbService.saveClients(user.id, finalClients),
-              DbService.saveTasks(user.id, finalTasks),
-              DbService.saveLeads(user.id, []),
-              DbService.saveProjects(user.id, []),
-              DbService.savePayments(user.id, [])
-            ]);
+          localStorage.setItem(`user_${user.id}_finances`, JSON.stringify([]));
+          localStorage.setItem(`user_${user.id}_reminders`, JSON.stringify([]));
+          localStorage.setItem(`user_${user.id}_auditLogs`, JSON.stringify([]));
+          localStorage.setItem(`user_${user.id}_websites`, JSON.stringify([]));
+          localStorage.setItem(`user_${user.id}_timeLogs`, JSON.stringify([]));
 
-            localStorage.setItem(`user_${user.id}_finances`, JSON.stringify([]));
-            localStorage.setItem(`user_${user.id}_reminders`, JSON.stringify([]));
-            localStorage.setItem(`user_${user.id}_auditLogs`, JSON.stringify([]));
-            localStorage.setItem(`user_${user.id}_websites`, JSON.stringify([]));
-            localStorage.setItem(`user_${user.id}_timeLogs`, JSON.stringify([]));
-
-            setShowHowToUsePopup(true);
-          } else {
-            finalClients = userClients;
-            finalLeads = userLeads;
-            finalProjects = userProjects;
-            finalTasks = userTasks;
-            finalPayments = userPayments;
-          }
+          setShowHowToUsePopup(true);
         }
 
         setClients(finalClients);
@@ -318,27 +279,27 @@ export default function App() {
             localStorage.setItem(`user_${user.id}_${key}`, JSON.stringify(dbExtraData[key]));
             return dbExtraData[key];
           }
-          const item = localStorage.getItem(`user_${user.id}_${key}`) || localStorage.getItem(key);
+          const item = localStorage.getItem(`user_${user.id}_${key}`);
           return item ? JSON.parse(item) : def;
         };
 
-        const finalFinances = resolveCollection('finances', userFinances, isNewSignup ? [] : INITIAL_FINANCE_LETTERS);
+        const finalFinances = resolveCollection('finances', userFinances, []);
         setFinances(finalFinances);
         lastSyncedFinancesRef.current = JSON.stringify(finalFinances);
 
-        const finalReminders = resolveCollection('reminders', userReminders, isNewSignup ? [] : INITIAL_REMINDERS);
+        const finalReminders = resolveCollection('reminders', userReminders, []);
         setReminders(finalReminders);
         lastSyncedRemindersRef.current = JSON.stringify(finalReminders);
 
-        const finalAuditLogs = resolveCollection('auditLogs', userAuditLogs, isNewSignup ? [] : INITIAL_AUDIT_LOGS);
+        const finalAuditLogs = resolveCollection('auditLogs', userAuditLogs, []);
         setAuditLogs(finalAuditLogs);
         lastSyncedAuditLogsRef.current = JSON.stringify(finalAuditLogs);
 
-        const finalWebsites = resolveCollection('websites', userWebsites, isNewSignup ? [] : INITIAL_WEBSITES);
+        const finalWebsites = resolveCollection('websites', userWebsites, []);
         setWebsites(finalWebsites);
         lastSyncedWebsitesRef.current = JSON.stringify(finalWebsites);
 
-        const finalTimeLogs = resolveCollection('timeLogs', userTimeLogs, isNewSignup ? [] : INITIAL_TIME_LOGS);
+        const finalTimeLogs = resolveCollection('timeLogs', userTimeLogs, []);
         setTimeLogs(finalTimeLogs);
         lastSyncedTimeLogsRef.current = JSON.stringify(finalTimeLogs);
 
@@ -1187,9 +1148,67 @@ export default function App() {
     }
   };
 
+  const syncWebsiteReminders = async (w: Website, deleteOnly = false) => {
+    const hostingRemId = `rem_web_${w.id}_hosting`;
+    const domainRemId = `rem_web_${w.id}_domain`;
+    
+    // Clear old reminders
+    setReminders(prev => prev.filter(r => r.id !== hostingRemId && r.id !== domainRemId));
+    if (user) {
+      try {
+        await DbService.deleteReminder(user.id, hostingRemId);
+        await DbService.deleteReminder(user.id, domainRemId);
+      } catch (err) {
+        console.warn('Failed to delete old website reminders:', err);
+      }
+    }
+
+    if (deleteOnly || w.status !== 'Active') return;
+
+    const newRems: Reminder[] = [];
+
+    if (w.hostingBillDate && w.hostingReminderDays) {
+      const alertDate = subtractDays(w.hostingBillDate, w.hostingReminderDays);
+      newRems.push({
+        id: hostingRemId,
+        type: 'Payment Due',
+        title: `${w.name} Hosting Renewal Due in ${w.hostingReminderDays} Days (${w.hostingBillDate})`,
+        dateTime: `${alertDate}T09:00`,
+        snoozedCount: 0,
+        status: 'Active'
+      });
+    }
+
+    if (w.domainBillDate && w.domainReminderDays) {
+      const alertDate = subtractDays(w.domainBillDate, w.domainReminderDays);
+      newRems.push({
+        id: domainRemId,
+        type: 'Payment Due',
+        title: `${w.name} Domain Renewal Due in ${w.domainReminderDays} Days (${w.domainBillDate})`,
+        dateTime: `${alertDate}T09:00`,
+        snoozedCount: 0,
+        status: 'Active'
+      });
+    }
+
+    if (newRems.length > 0) {
+      setReminders(prev => [...prev, ...newRems]);
+      if (user) {
+        for (const rem of newRems) {
+          try {
+            await DbService.upsertReminder(user.id, rem);
+          } catch (err) {
+            console.warn('Failed to upsert website reminder:', err);
+          }
+        }
+      }
+    }
+  };
+
   const handleAddWebsite = async (w: Website) => {
     const original = [...websites];
     setWebsites(prev => [...prev, w]);
+    syncWebsiteReminders(w);
     if (!user) return;
     try {
       await DbService.upsertWebsite(user.id, w);
@@ -1204,6 +1223,7 @@ export default function App() {
   const handleEditWebsite = async (w: Website) => {
     const original = [...websites];
     setWebsites(prev => prev.map(item => item.id === w.id ? w : item));
+    syncWebsiteReminders(w);
     if (!user) return;
     try {
       await DbService.upsertWebsite(user.id, w);
@@ -1230,6 +1250,7 @@ export default function App() {
         archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
       };
       setArchivedItems(prev => [archived!, ...prev]);
+      syncWebsiteReminders(target, true);
     }
     setWebsites(prev => prev.filter(item => item.id !== id));
 

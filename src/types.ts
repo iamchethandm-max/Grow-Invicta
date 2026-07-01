@@ -168,6 +168,8 @@ export interface Website {
   status: 'Active' | 'Inactive' | 'Under Maintenance' | 'Suspended';
   notes: string;
   clientId?: string; // Links to Client CRM
+  hostingReminderDays?: number; // 7, 10, 15, 30
+  domainReminderDays?: number; // 7, 10, 15, 30
 }
 
 export interface TimeLog {
