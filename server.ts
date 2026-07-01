@@ -9,15 +9,26 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-// Initialize Gemini SDK
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+// Initialize Gemini SDK lazily
+let aiClient: GoogleGenAI | null = null;
+
+function getGeminiClient(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY environment variable is not defined. Please add your Gemini API key in the 'Settings > Secrets' panel in Google AI Studio to enable the AI assistant.");
     }
+    aiClient = new GoogleGenAI({
+      apiKey: apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
   }
-});
+  return aiClient;
+}
 
 app.use(express.json({ limit: "50mb" }));
 
@@ -29,6 +40,8 @@ app.post("/api/ai/chat", async (req, res) => {
     if (!message) {
       return res.status(400).json({ error: "Message is required." });
     }
+
+    const ai = getGeminiClient();
 
     const systemInstruction = `You are the GrowInvicta Business AI Assistant, an elite workspace manager.
 You help the agency owners and managers monitor their business, analyze reports, and execute operations.

@@ -331,7 +331,14 @@ export default function AIAssistant({
       });
 
       if (!res.ok) {
-        throw new Error('Failed to fetch AI response');
+        let errMsg = 'Failed to fetch AI response';
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            errMsg = errData.error;
+          }
+        } catch (_) {}
+        throw new Error(errMsg);
       }
 
       const data = await res.json();
