@@ -550,156 +550,7 @@ export default function App() {
     }
   }, [user]);
 
-  // Save sync hooks for Supabase CRM tables
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(clients);
-      if (str !== lastSyncedClientsRef.current) {
-        lastSyncedClientsRef.current = str;
-        DbService.saveClients(user.id, clients);
-      }
-    }
-  }, [clients, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(leads);
-      if (str !== lastSyncedLeadsRef.current) {
-        lastSyncedLeadsRef.current = str;
-        DbService.saveLeads(user.id, leads);
-      }
-    }
-  }, [leads, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(projects);
-      if (str !== lastSyncedProjectsRef.current) {
-        lastSyncedProjectsRef.current = str;
-        DbService.saveProjects(user.id, projects);
-      }
-    }
-  }, [projects, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(tasks);
-      if (str !== lastSyncedTasksRef.current) {
-        lastSyncedTasksRef.current = str;
-        DbService.saveTasks(user.id, tasks);
-      }
-    }
-  }, [tasks, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(payments);
-      if (str !== lastSyncedPaymentsRef.current) {
-        lastSyncedPaymentsRef.current = str;
-        DbService.savePayments(user.id, payments);
-      }
-    }
-  }, [payments, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(finances);
-      if (str !== lastSyncedFinancesRef.current) {
-        lastSyncedFinancesRef.current = str;
-        localStorage.setItem(`user_${user.id}_finances`, str);
-        DbService.saveFinances(user.id, finances);
-      }
-    }
-  }, [finances, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(reminders);
-      if (str !== lastSyncedRemindersRef.current) {
-        lastSyncedRemindersRef.current = str;
-        localStorage.setItem(`user_${user.id}_reminders`, str);
-        DbService.saveReminders(user.id, reminders);
-      }
-    }
-  }, [reminders, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(auditLogs);
-      if (str !== lastSyncedAuditLogsRef.current) {
-        lastSyncedAuditLogsRef.current = str;
-        localStorage.setItem(`user_${user.id}_auditLogs`, str);
-        DbService.saveAuditLogs(user.id, auditLogs);
-      }
-    }
-  }, [auditLogs, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(websites);
-      if (str !== lastSyncedWebsitesRef.current) {
-        lastSyncedWebsitesRef.current = str;
-        localStorage.setItem(`user_${user.id}_websites`, str);
-        DbService.saveWebsites(user.id, websites);
-      }
-    }
-  }, [websites, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(timeLogs);
-      if (str !== lastSyncedTimeLogsRef.current) {
-        lastSyncedTimeLogsRef.current = str;
-        localStorage.setItem(`user_${user.id}_timeLogs`, str);
-        DbService.saveTimeLogs(user.id, timeLogs);
-      }
-    }
-  }, [timeLogs, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(archivedItems);
-      if (str !== lastSyncedArchivedItemsRef.current) {
-        lastSyncedArchivedItemsRef.current = str;
-        localStorage.setItem(`user_${user.id}_archivedItems`, str);
-        DbService.saveArchivedItems(user.id, archivedItems);
-      }
-    }
-  }, [archivedItems, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(profileSettings);
-      if (str !== lastSyncedProfileSettingsRef.current) {
-        lastSyncedProfileSettingsRef.current = str;
-        localStorage.setItem(`user_${user.id}_profileSettings`, str);
-        DbService.saveProfileSettings(user.id, profileSettings);
-      }
-    }
-  }, [profileSettings, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(calendarEvents);
-      if (str !== lastSyncedCalendarEventsRef.current) {
-        lastSyncedCalendarEventsRef.current = str;
-        localStorage.setItem(`user_${user.id}_calendar`, str);
-        DbService.saveCalendarEvents(user.id, calendarEvents);
-      }
-    }
-  }, [calendarEvents, user, dbLoaded]);
-
-  useEffect(() => {
-    if (user && dbLoaded) {
-      const str = JSON.stringify(reports);
-      if (str !== lastSyncedReportsRef.current) {
-        lastSyncedReportsRef.current = str;
-        localStorage.setItem(`user_${user.id}_reports`, str);
-        DbService.saveReports(user.id, reports);
-      }
-    }
-  }, [reports, user, dbLoaded]);
-
+  // Batch sync hooks removed in favor of direct database-first CRUD operations and Realtime sync.
   useEffect(() => {
     if (user && dbLoaded) {
       const str = JSON.stringify(enabledFeatures);
@@ -1015,6 +866,518 @@ export default function App() {
       details
     };
     setAuditLogs(prev => [log, ...prev]);
+  };
+
+  // ==========================================
+  // DATABASE-FIRST OPTIMISTIC CRUD OPERATIONS
+  // ==========================================
+
+  const handleAddClient = async (c: Client) => {
+    const original = [...clients];
+    setClients(prev => [...prev, c]);
+    if (!user) return;
+    try {
+      await DbService.upsertClient(user.id, c);
+      const fresh = await DbService.getClients(user.id);
+      setClients(fresh);
+    } catch (err) {
+      console.error('Failed to add client:', err);
+      setClients(original);
+    }
+  };
+
+  const handleEditClient = async (c: Client) => {
+    const original = [...clients];
+    setClients(prev => prev.map(item => item.id === c.id ? c : item));
+    if (!user) return;
+    try {
+      await DbService.upsertClient(user.id, c);
+      const fresh = await DbService.getClients(user.id);
+      setClients(fresh);
+    } catch (err) {
+      console.error('Failed to edit client:', err);
+      setClients(original);
+    }
+  };
+
+  const handleDeleteClient = async (id: string) => {
+    const originalClients = [...clients];
+    const originalArchived = [...archivedItems];
+
+    const target = clients.find(c => c.id === id);
+    let archived: ArchivedItem | null = null;
+    if (target) {
+      archived = {
+        id: `arch_${Date.now()}_${id}`,
+        type: 'client',
+        name: target.company || target.name,
+        originalData: target,
+        archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      };
+      setArchivedItems(prev => [archived!, ...prev]);
+    }
+    setClients(prev => prev.filter(item => item.id !== id));
+
+    if (!user) return;
+    try {
+      await DbService.deleteClient(user.id, id);
+      if (archived) {
+        await DbService.upsertArchivedItem(user.id, archived);
+      }
+      const freshClients = await DbService.getClients(user.id);
+      const freshArchived = await DbService.getArchivedItems(user.id);
+      setClients(freshClients);
+      setArchivedItems(freshArchived);
+    } catch (err) {
+      console.error('Failed to delete client:', err);
+      setClients(originalClients);
+      setArchivedItems(originalArchived);
+    }
+  };
+
+  const handleAddProject = async (p: Project) => {
+    const original = [...projects];
+    setProjects(prev => [...prev, p]);
+    if (!user) return;
+    try {
+      await DbService.upsertProject(user.id, p);
+      const fresh = await DbService.getProjects(user.id);
+      setProjects(fresh);
+    } catch (err) {
+      console.error('Failed to add project:', err);
+      setProjects(original);
+    }
+  };
+
+  const handleEditProject = async (p: Project) => {
+    const original = [...projects];
+    setProjects(prev => prev.map(item => item.id === p.id ? p : item));
+    if (!user) return;
+    try {
+      await DbService.upsertProject(user.id, p);
+      const fresh = await DbService.getProjects(user.id);
+      setProjects(fresh);
+    } catch (err) {
+      console.error('Failed to edit project:', err);
+      setProjects(original);
+    }
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    const originalProjects = [...projects];
+    const originalArchived = [...archivedItems];
+
+    const target = projects.find(p => p.id === id);
+    let archived: ArchivedItem | null = null;
+    if (target) {
+      archived = {
+        id: `arch_${Date.now()}_${id}`,
+        type: 'project',
+        name: target.name,
+        originalData: target,
+        archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      };
+      setArchivedItems(prev => [archived!, ...prev]);
+    }
+    setProjects(prev => prev.filter(item => item.id !== id));
+
+    if (!user) return;
+    try {
+      await DbService.deleteProject(user.id, id);
+      if (archived) {
+        await DbService.upsertArchivedItem(user.id, archived);
+      }
+      const freshProjects = await DbService.getProjects(user.id);
+      const freshArchived = await DbService.getArchivedItems(user.id);
+      setProjects(freshProjects);
+      setArchivedItems(freshArchived);
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+      setProjects(originalProjects);
+      setArchivedItems(originalArchived);
+    }
+  };
+
+  const handleAddLead = async (l: Lead) => {
+    const original = [...leads];
+    setLeads(prev => [...prev, l]);
+    if (!user) return;
+    try {
+      await DbService.upsertLead(user.id, l);
+      const fresh = await DbService.getLeads(user.id);
+      setLeads(fresh);
+    } catch (err) {
+      console.error('Failed to add lead:', err);
+      setLeads(original);
+    }
+  };
+
+  const handleEditLead = async (l: Lead) => {
+    const original = [...leads];
+    setLeads(prev => prev.map(item => item.id === l.id ? l : item));
+    if (!user) return;
+    try {
+      await DbService.upsertLead(user.id, l);
+      const fresh = await DbService.getLeads(user.id);
+      setLeads(fresh);
+    } catch (err) {
+      console.error('Failed to edit lead:', err);
+      setLeads(original);
+    }
+  };
+
+  const handleDeleteLead = async (id: string) => {
+    const originalLeads = [...leads];
+    const originalArchived = [...archivedItems];
+
+    const target = leads.find(l => l.id === id);
+    let archived: ArchivedItem | null = null;
+    if (target) {
+      archived = {
+        id: `arch_${Date.now()}_${id}`,
+        type: 'lead',
+        name: target.company || target.name,
+        originalData: target,
+        archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      };
+      setArchivedItems(prev => [archived!, ...prev]);
+    }
+    setLeads(prev => prev.filter(item => item.id !== id));
+
+    if (!user) return;
+    try {
+      await DbService.deleteLead(user.id, id);
+      if (archived) {
+        await DbService.upsertArchivedItem(user.id, archived);
+      }
+      const freshLeads = await DbService.getLeads(user.id);
+      const freshArchived = await DbService.getArchivedItems(user.id);
+      setLeads(freshLeads);
+      setArchivedItems(freshArchived);
+    } catch (err) {
+      console.error('Failed to delete lead:', err);
+      setLeads(originalLeads);
+      setArchivedItems(originalArchived);
+    }
+  };
+
+  const handleAddPayment = async (p: Payment) => {
+    const original = [...payments];
+    setPayments(prev => [...prev, p]);
+    if (!user) return;
+    try {
+      await DbService.upsertPayment(user.id, p);
+      const fresh = await DbService.getPayments(user.id);
+      setPayments(fresh);
+    } catch (err) {
+      console.error('Failed to add payment:', err);
+      setPayments(original);
+    }
+  };
+
+  const handleEditPayment = async (p: Payment) => {
+    const original = [...payments];
+    setPayments(prev => prev.map(item => item.id === p.id ? p : item));
+    if (!user) return;
+    try {
+      await DbService.upsertPayment(user.id, p);
+      const fresh = await DbService.getPayments(user.id);
+      setPayments(fresh);
+    } catch (err) {
+      console.error('Failed to edit payment:', err);
+      setPayments(original);
+    }
+  };
+
+  const handleDeletePayment = async (id: string) => {
+    const originalPayments = [...payments];
+    const originalArchived = [...archivedItems];
+
+    const target = payments.find(p => p.id === id);
+    let archived: ArchivedItem | null = null;
+    if (target) {
+      archived = {
+        id: `arch_${Date.now()}_${id}`,
+        type: 'payment',
+        name: `${target.invoiceNumber} (${target.clientName})`,
+        originalData: target,
+        archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      };
+      setArchivedItems(prev => [archived!, ...prev]);
+    }
+    setPayments(prev => prev.filter(item => item.id !== id));
+
+    if (!user) return;
+    try {
+      await DbService.deletePayment(user.id, id);
+      if (archived) {
+        await DbService.upsertArchivedItem(user.id, archived);
+      }
+      const freshPayments = await DbService.getPayments(user.id);
+      const freshArchived = await DbService.getArchivedItems(user.id);
+      setPayments(freshPayments);
+      setArchivedItems(freshArchived);
+    } catch (err) {
+      console.error('Failed to delete payment:', err);
+      setPayments(originalPayments);
+      setArchivedItems(originalArchived);
+    }
+  };
+
+  const handleAddFinance = async (f: FinanceLedger) => {
+    const original = [...finances];
+    setFinances(prev => [f, ...prev]);
+    if (!user) return;
+    try {
+      await DbService.upsertFinance(user.id, f);
+      const fresh = await DbService.getFinances(user.id);
+      setFinances(fresh);
+    } catch (err) {
+      console.error('Failed to add finance:', err);
+      setFinances(original);
+    }
+  };
+
+  const handleEditFinance = async (f: FinanceLedger) => {
+    const original = [...finances];
+    setFinances(prev => prev.map(item => item.id === f.id ? f : item));
+    if (!user) return;
+    try {
+      await DbService.upsertFinance(user.id, f);
+      const fresh = await DbService.getFinances(user.id);
+      setFinances(fresh);
+    } catch (err) {
+      console.error('Failed to edit finance:', err);
+      setFinances(original);
+    }
+  };
+
+  const handleDeleteFinance = async (id: string) => {
+    const originalFinances = [...finances];
+    const originalArchived = [...archivedItems];
+
+    const target = finances.find(f => f.id === id);
+    let archived: ArchivedItem | null = null;
+    if (target) {
+      archived = {
+        id: `arch_${Date.now()}_${id}`,
+        type: 'finance',
+        name: `${target.category} (₹${target.amount})`,
+        originalData: target,
+        archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      };
+      setArchivedItems(prev => [archived!, ...prev]);
+    }
+    setFinances(prev => prev.filter(item => item.id !== id));
+
+    if (!user) return;
+    try {
+      await DbService.deleteFinance(user.id, id);
+      if (archived) {
+        await DbService.upsertArchivedItem(user.id, archived);
+      }
+      const freshFinances = await DbService.getFinances(user.id);
+      const freshArchived = await DbService.getArchivedItems(user.id);
+      setFinances(freshFinances);
+      setArchivedItems(freshArchived);
+    } catch (err) {
+      console.error('Failed to delete finance:', err);
+      setFinances(originalFinances);
+      setArchivedItems(originalArchived);
+    }
+  };
+
+  const handleAddWebsite = async (w: Website) => {
+    const original = [...websites];
+    setWebsites(prev => [...prev, w]);
+    if (!user) return;
+    try {
+      await DbService.upsertWebsite(user.id, w);
+      const fresh = await DbService.getWebsites(user.id);
+      setWebsites(fresh);
+    } catch (err) {
+      console.error('Failed to add website:', err);
+      setWebsites(original);
+    }
+  };
+
+  const handleEditWebsite = async (w: Website) => {
+    const original = [...websites];
+    setWebsites(prev => prev.map(item => item.id === w.id ? w : item));
+    if (!user) return;
+    try {
+      await DbService.upsertWebsite(user.id, w);
+      const fresh = await DbService.getWebsites(user.id);
+      setWebsites(fresh);
+    } catch (err) {
+      console.error('Failed to edit website:', err);
+      setWebsites(original);
+    }
+  };
+
+  const handleDeleteWebsite = async (id: string) => {
+    const originalWebsites = [...websites];
+    const originalArchived = [...archivedItems];
+
+    const target = websites.find(w => w.id === id);
+    let archived: ArchivedItem | null = null;
+    if (target) {
+      archived = {
+        id: `arch_${Date.now()}_${id}`,
+        type: 'website',
+        name: `${target.name} (${target.url})`,
+        originalData: target,
+        archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      };
+      setArchivedItems(prev => [archived!, ...prev]);
+    }
+    setWebsites(prev => prev.filter(item => item.id !== id));
+
+    if (!user) return;
+    try {
+      await DbService.deleteWebsite(user.id, id);
+      if (archived) {
+        await DbService.upsertArchivedItem(user.id, archived);
+      }
+      const freshWebsites = await DbService.getWebsites(user.id);
+      const freshArchived = await DbService.getArchivedItems(user.id);
+      setWebsites(freshWebsites);
+      setArchivedItems(freshArchived);
+    } catch (err) {
+      console.error('Failed to delete website:', err);
+      setWebsites(originalWebsites);
+      setArchivedItems(originalArchived);
+    }
+  };
+
+  const handleAddTimeLog = async (log: TimeLog) => {
+    const original = [...timeLogs];
+    setTimeLogs(prev => [log, ...prev]);
+    if (!user) return;
+    try {
+      await DbService.upsertTimeLog(user.id, log);
+      const fresh = await DbService.getTimeLogs(user.id);
+      setTimeLogs(fresh);
+    } catch (err) {
+      console.error('Failed to add time log:', err);
+      setTimeLogs(original);
+    }
+  };
+
+  const handleDeleteTimeLog = async (id: string) => {
+    const original = [...timeLogs];
+    setTimeLogs(prev => prev.filter(item => item.id !== id));
+    if (!user) return;
+    try {
+      await DbService.deleteTimeLog(user.id, id);
+      const fresh = await DbService.getTimeLogs(user.id);
+      setTimeLogs(fresh);
+    } catch (err) {
+      console.error('Failed to delete time log:', err);
+      setTimeLogs(original);
+    }
+  };
+
+  const handleRestoreArchive = async (item: ArchivedItem) => {
+    const originalArchived = [...archivedItems];
+    setArchivedItems(prev => prev.filter(arch => arch.id !== item.id));
+
+    let targetStateSetter: any = null;
+    let originalTargetState: any = null;
+    let dbUpsertMethod: any = null;
+    let dbGetMethod: any = null;
+
+    switch (item.type) {
+      case 'client':
+        targetStateSetter = setClients;
+        originalTargetState = [...clients];
+        dbUpsertMethod = DbService.upsertClient.bind(DbService);
+        dbGetMethod = DbService.getClients.bind(DbService);
+        setClients(prev => [...prev, item.originalData]);
+        break;
+      case 'lead':
+        targetStateSetter = setLeads;
+        originalTargetState = [...leads];
+        dbUpsertMethod = DbService.upsertLead.bind(DbService);
+        dbGetMethod = DbService.getLeads.bind(DbService);
+        setLeads(prev => [...prev, item.originalData]);
+        break;
+      case 'project':
+        targetStateSetter = setProjects;
+        originalTargetState = [...projects];
+        dbUpsertMethod = DbService.upsertProject.bind(DbService);
+        dbGetMethod = DbService.getProjects.bind(DbService);
+        setProjects(prev => [...prev, item.originalData]);
+        break;
+      case 'task':
+        targetStateSetter = setTasks;
+        originalTargetState = [...tasks];
+        dbUpsertMethod = DbService.upsertTask.bind(DbService);
+        dbGetMethod = DbService.getTasks.bind(DbService);
+        setTasks(prev => [...prev, item.originalData]);
+        break;
+      case 'payment':
+        targetStateSetter = setPayments;
+        originalTargetState = [...payments];
+        dbUpsertMethod = DbService.upsertPayment.bind(DbService);
+        dbGetMethod = DbService.getPayments.bind(DbService);
+        setPayments(prev => [...prev, item.originalData]);
+        break;
+      case 'finance':
+        targetStateSetter = setFinances;
+        originalTargetState = [...finances];
+        dbUpsertMethod = DbService.upsertFinance.bind(DbService);
+        dbGetMethod = DbService.getFinances.bind(DbService);
+        setFinances(prev => [item.originalData, ...prev]);
+        break;
+      case 'website':
+        targetStateSetter = setWebsites;
+        originalTargetState = [...websites];
+        dbUpsertMethod = DbService.upsertWebsite.bind(DbService);
+        dbGetMethod = DbService.getWebsites.bind(DbService);
+        setWebsites(prev => [...prev, item.originalData]);
+        break;
+    }
+
+    if (!user) return;
+    try {
+      await DbService.deleteArchivedItem(user.id, item.id);
+      if (dbUpsertMethod) {
+        await dbUpsertMethod(user.id, item.originalData);
+      }
+      const freshArchived = await DbService.getArchivedItems(user.id);
+      setArchivedItems(freshArchived);
+      if (dbGetMethod && targetStateSetter) {
+        const freshTarget = await dbGetMethod(user.id);
+        targetStateSetter(freshTarget);
+      }
+      writeAuditEntry('Archive Restored', `Recovered deleted ${item.type}: ${item.name}`);
+    } catch (err) {
+      console.error('Failed to restore archived item:', err);
+      setArchivedItems(originalArchived);
+      if (targetStateSetter && originalTargetState) {
+        targetStateSetter(originalTargetState);
+      }
+    }
+  };
+
+  const handleDeletePermanentArchive = async (id: string) => {
+    const original = [...archivedItems];
+    const target = archivedItems.find(arch => arch.id === id);
+    setArchivedItems(prev => prev.filter(arch => arch.id !== id));
+
+    if (!user) return;
+    try {
+      await DbService.deleteArchivedItem(user.id, id);
+      const fresh = await DbService.getArchivedItems(user.id);
+      setArchivedItems(fresh);
+      if (target) {
+        writeAuditEntry('Permanent Delete', `Scrubbed archive item: ${target.name}`);
+      }
+    } catch (err) {
+      console.error('Failed to delete archived item permanently:', err);
+      setArchivedItems(original);
+    }
   };
 
   const handleRoleToggle = (role: UserRole) => {
@@ -1529,47 +1892,21 @@ export default function App() {
             <ClientsCRM 
               clients={clients}
               projects={projects}
-              onAddClient={(c) => setClients(prev => [...prev, c])}
-              onEditClient={(c) => setClients(prev => prev.map(item => item.id === c.id ? c : item))}
-              onDeleteClient={(id) => {
-                const target = clients.find(c => c.id === id);
-                if (target) {
-                  const archived: ArchivedItem = {
-                    id: `arch_${Date.now()}_${id}`,
-                    type: 'client',
-                    name: target.company || target.name,
-                    originalData: target,
-                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
-                  };
-                  setArchivedItems(prev => [archived, ...prev]);
-                }
-                setClients(prev => prev.filter(item => item.id !== id));
-              }}
-              onAddProject={(p) => setProjects(prev => [...prev, p])}
-              onEditProject={(p) => setProjects(prev => prev.map(item => item.id === p.id ? p : item))}
-              onDeleteProject={(id) => setProjects(prev => prev.filter(item => item.id !== id))}
+              onAddClient={handleAddClient}
+              onEditClient={handleEditClient}
+              onDeleteClient={handleDeleteClient}
+              onAddProject={handleAddProject}
+              onEditProject={handleEditProject}
+              onDeleteProject={handleDeleteProject}
             />
           )}
 
           {activeTab === 'leads' && (
             <LeadTracker 
               leads={leads}
-              onAddLead={(l) => setLeads(prev => [...prev, l])}
-              onEditLead={(l) => setLeads(prev => prev.map(item => item.id === l.id ? l : item))}
-              onDeleteLead={(id) => {
-                const target = leads.find(l => l.id === id);
-                if (target) {
-                  const archived: ArchivedItem = {
-                    id: `arch_${Date.now()}_${id}`,
-                    type: 'lead',
-                    name: target.company || target.name,
-                    originalData: target,
-                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
-                  };
-                  setArchivedItems(prev => [archived, ...prev]);
-                }
-                setLeads(prev => prev.filter(item => item.id !== id));
-              }}
+              onAddLead={handleAddLead}
+              onEditLead={handleEditLead}
+              onDeleteLead={handleDeleteLead}
             />
           )}
 
@@ -1578,22 +1915,9 @@ export default function App() {
               projects={projects}
               currentUserRole={currentUserRole}
               currentUsername={currentUsername}
-              onAddProject={(p) => setProjects(prev => [...prev, p])}
-              onEditProject={(p) => setProjects(prev => prev.map(item => item.id === p.id ? p : item))}
-              onDeleteProject={(id) => {
-                const target = projects.find(p => p.id === id);
-                if (target) {
-                  const archived: ArchivedItem = {
-                    id: `arch_${Date.now()}_${id}`,
-                    type: 'project',
-                    name: target.name,
-                    originalData: target,
-                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
-                  };
-                  setArchivedItems(prev => [archived, ...prev]);
-                }
-                setProjects(prev => prev.filter(item => item.id !== id));
-              }}
+              onAddProject={handleAddProject}
+              onEditProject={handleEditProject}
+              onDeleteProject={handleDeleteProject}
               theme={theme}
             />
           )}
@@ -1606,38 +1930,12 @@ export default function App() {
               finances={finances}
               clients={clients}
               websites={websites}
-              onAddPayment={(p) => setPayments(prev => [...prev, p])}
-              onEditPayment={(p) => setPayments(prev => prev.map(item => item.id === p.id ? p : item))}
-              onDeletePayment={(id) => {
-                const target = payments.find(p => p.id === id);
-                if (target) {
-                  const archived: ArchivedItem = {
-                    id: `arch_${Date.now()}_${id}`,
-                    type: 'payment',
-                    name: `${target.invoiceNumber} (${target.clientName})`,
-                    originalData: target,
-                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
-                  };
-                  setArchivedItems(prev => [archived, ...prev]);
-                }
-                setPayments(prev => prev.filter(item => item.id !== id));
-              }}
-              onAddFinance={(f) => setFinances(prev => [f, ...prev])}
-              onEditFinance={(f) => setFinances(prev => prev.map(item => item.id === f.id ? f : item))}
-              onDeleteFinance={(id) => {
-                const target = finances.find(f => f.id === id);
-                if (target) {
-                  const archived: ArchivedItem = {
-                    id: `arch_${Date.now()}_${id}`,
-                    type: 'finance',
-                    name: `${target.category} (₹${target.amount})`,
-                    originalData: target,
-                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
-                  };
-                  setArchivedItems(prev => [archived, ...prev]);
-                }
-                setFinances(prev => prev.filter(item => item.id !== id));
-              }}
+              onAddPayment={handleAddPayment}
+              onEditPayment={handleEditPayment}
+              onDeletePayment={handleDeletePayment}
+              onAddFinance={handleAddFinance}
+              onEditFinance={handleEditFinance}
+              onDeleteFinance={handleDeleteFinance}
             />
           )}
 
@@ -1659,22 +1957,9 @@ export default function App() {
             <WebsitesManager 
               websites={websites}
               clients={clients}
-              onAddWebsite={(w) => setWebsites(prev => [...prev, w])}
-              onEditWebsite={(w) => setWebsites(prev => prev.map(item => item.id === w.id ? w : item))}
-              onDeleteWebsite={(id) => {
-                const target = websites.find(w => w.id === id);
-                if (target) {
-                  const archived: ArchivedItem = {
-                    id: `arch_${Date.now()}_${id}`,
-                    type: 'website',
-                    name: `${target.name} (${target.url})`,
-                    originalData: target,
-                    archivedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
-                  };
-                  setArchivedItems(prev => [archived, ...prev]);
-                }
-                setWebsites(prev => prev.filter(item => item.id !== id));
-              }}
+              onAddWebsite={handleAddWebsite}
+              onEditWebsite={handleEditWebsite}
+              onDeleteWebsite={handleDeleteWebsite}
               onAuditLog={(action, details) => writeAuditEntry(action, details)}
             />
           )}
@@ -1686,8 +1971,8 @@ export default function App() {
               tasks={tasks}
               timeLogs={timeLogs}
               clients={clients}
-              onAddLog={(log) => setTimeLogs(prev => [log, ...prev])}
-              onDeleteLog={(id) => setTimeLogs(prev => prev.filter(item => item.id !== id))}
+              onAddLog={handleAddTimeLog}
+              onDeleteLog={handleDeleteTimeLog}
               theme={theme}
             />
           )}
@@ -1729,40 +2014,8 @@ export default function App() {
                 {settingsSubTab === 'archive' && (
                   <ArchiveCenter 
                     archivedItems={archivedItems}
-                    onRestore={(item) => {
-                      setArchivedItems(prev => prev.filter(arch => arch.id !== item.id));
-                      switch (item.type) {
-                        case 'client':
-                          setClients(prev => [...prev, item.originalData]);
-                          break;
-                        case 'lead':
-                          setLeads(prev => [...prev, item.originalData]);
-                          break;
-                        case 'project':
-                          setProjects(prev => [...prev, item.originalData]);
-                          break;
-                        case 'task':
-                          setTasks(prev => [...prev, item.originalData]);
-                          break;
-                        case 'payment':
-                          setPayments(prev => [...prev, item.originalData]);
-                          break;
-                        case 'finance':
-                          setFinances(prev => [item.originalData, ...prev]);
-                          break;
-                        case 'website':
-                          setWebsites(prev => [...prev, item.originalData]);
-                          break;
-                      }
-                      writeAuditEntry('Archive Restored', `Recovered deleted ${item.type}: ${item.name}`);
-                    }}
-                    onDeletePermanent={(id) => {
-                      const target = archivedItems.find(arch => arch.id === id);
-                      setArchivedItems(prev => prev.filter(arch => arch.id !== id));
-                      if (target) {
-                        writeAuditEntry('Permanent Delete', `Scrubbed archive item: ${target.name}`);
-                      }
-                    }}
+                    onRestore={handleRestoreArchive}
+                    onDeletePermanent={handleDeletePermanentArchive}
                     theme={theme}
                   />
                 )}

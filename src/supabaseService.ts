@@ -296,6 +296,20 @@ CREATE TABLE IF NOT EXISTS public.calendar (
 ALTER TABLE public.calendar ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can modify their own calendar" 
   ON public.calendar FOR ALL USING (auth.uid() = user_id);
+
+-- 16. Create AI Conversations Table
+CREATE TABLE IF NOT EXISTS public.ai_conversations (
+  id TEXT NOT NULL PRIMARY KEY,
+  user_id UUID REFERENCES auth.users NOT NULL,
+  role TEXT NOT NULL,
+  text TEXT NOT NULL,
+  timestamp TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.ai_conversations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can modify their own ai_conversations" 
+  ON public.ai_conversations FOR ALL USING (auth.uid() = user_id);
 `;
 
 // LocalStorage helpers for fallbacks
@@ -1525,5 +1539,592 @@ export const DbService = {
     } catch (err) {
       console.warn('DB reports save error:', err);
     }
+  },
+
+  // SINGLE RECORD CRUD IMPLEMENTATIONS
+  async upsertClient(userId: string, client: Client): Promise<void> {
+    // 1. Cache locally first
+    const local = getLocalBackup<Client[]>('clients', userId, []).filter(c => c.id !== '__system_extra_data__');
+    const idx = local.findIndex(c => c.id === client.id);
+    if (idx >= 0) local[idx] = client;
+    else local.push(client);
+    setLocalBackup('clients', userId, local);
+
+    // 2. Try writing to Supabase
+    try {
+      const record = {
+        id: client.id,
+        user_id: userId,
+        name: client.name,
+        company: client.company,
+        mobile: client.mobile,
+        whatsapp: client.whatsapp,
+        email: client.email,
+        address: client.address,
+        gst_number: client.gstNumber,
+        website: client.website,
+        notes: client.notes,
+        created_at: client.createdAt,
+        status: client.status,
+        metrics: client.metrics,
+        contracts: client.contracts,
+        timeline: client.timeline
+      };
+      const { error } = await supabase.from('clients').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertClient failed, saved to local cache:', err);
+      throw err;
+    }
+  },
+
+  async deleteClient(userId: string, clientId: string): Promise<void> {
+    // 1. Cache locally first
+    const local = getLocalBackup<Client[]>('clients', userId, []).filter(c => c.id !== clientId);
+    setLocalBackup('clients', userId, local);
+
+    // 2. Delete from Supabase
+    try {
+      const { error } = await supabase.from('clients').delete().eq('id', clientId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deleteClient failed:', err);
+      throw err;
+    }
+  },
+
+  async upsertLead(userId: string, lead: Lead): Promise<void> {
+    const local = getLocalBackup<Lead[]>('leads', userId, []);
+    const idx = local.findIndex(l => l.id === lead.id);
+    if (idx >= 0) local[idx] = lead;
+    else local.push(lead);
+    setLocalBackup('leads', userId, local);
+
+    try {
+      const record = {
+        id: lead.id,
+        user_id: userId,
+        name: lead.name,
+        company: lead.company,
+        phone: lead.phone,
+        email: lead.email,
+        source: lead.source,
+        status: lead.status,
+        value: lead.value,
+        follow_up_date: lead.followUpDate,
+        notes: lead.notes,
+        created_at: lead.createdAt
+      };
+      const { error } = await supabase.from('leads').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertLead failed:', err);
+      throw err;
+    }
+  },
+
+  async deleteLead(userId: string, leadId: string): Promise<void> {
+    const local = getLocalBackup<Lead[]>('leads', userId, []).filter(l => l.id !== leadId);
+    setLocalBackup('leads', userId, local);
+
+    try {
+      const { error } = await supabase.from('leads').delete().eq('id', leadId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deleteLead failed:', err);
+      throw err;
+    }
+  },
+
+  async upsertProject(userId: string, project: Project): Promise<void> {
+    const local = getLocalBackup<Project[]>('projects', userId, []);
+    const idx = local.findIndex(p => p.id === project.id);
+    if (idx >= 0) local[idx] = project;
+    else local.push(project);
+    setLocalBackup('projects', userId, local);
+
+    try {
+      const record = {
+        id: project.id,
+        user_id: userId,
+        name: project.name,
+        client_name: project.clientName,
+        type: project.type,
+        start_date: project.startDate,
+        end_date: project.endDate,
+        budget: project.budget,
+        team_members: project.teamMembers,
+        priority: project.priority,
+        status: project.status,
+        progress: project.progress,
+        milestones: project.milestones,
+        comments: project.comments,
+        created_at: project.startDate || new Date().toISOString()
+      };
+      const { error } = await supabase.from('projects').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertProject failed:', err);
+      throw err;
+    }
+  },
+
+  async deleteProject(userId: string, projectId: string): Promise<void> {
+    const local = getLocalBackup<Project[]>('projects', userId, []).filter(p => p.id !== projectId);
+    setLocalBackup('projects', userId, local);
+
+    try {
+      const { error } = await supabase.from('projects').delete().eq('id', projectId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deleteProject failed:', err);
+      throw err;
+    }
+  },
+
+  async upsertTask(userId: string, task: Task): Promise<void> {
+    const local = getLocalBackup<Task[]>('tasks', userId, []);
+    const idx = local.findIndex(t => t.id === task.id);
+    if (idx >= 0) local[idx] = task;
+    else local.push(task);
+    setLocalBackup('tasks', userId, local);
+
+    try {
+      const record = {
+        id: task.id,
+        user_id: userId,
+        title: task.title,
+        description: task.description,
+        assigned_to: task.assignedTo,
+        project: task.project,
+        due_date: task.dueDate,
+        priority: task.priority,
+        status: task.status,
+        created_at: task.createdAt
+      };
+      const { error } = await supabase.from('tasks').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertTask failed:', err);
+      throw err;
+    }
+  },
+
+  async deleteTask(userId: string, taskId: string): Promise<void> {
+    const local = getLocalBackup<Task[]>('tasks', userId, []).filter(t => t.id !== taskId);
+    setLocalBackup('tasks', userId, local);
+
+    try {
+      const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deleteTask failed:', err);
+      throw err;
+    }
+  },
+
+  async upsertPayment(userId: string, payment: Payment): Promise<void> {
+    const local = getLocalBackup<Payment[]>('payments', userId, []);
+    const idx = local.findIndex(p => p.id === payment.id);
+    if (idx >= 0) local[idx] = payment;
+    else local.push(payment);
+    setLocalBackup('payments', userId, local);
+
+    try {
+      const record = {
+        id: payment.id,
+        user_id: userId,
+        client_name: payment.clientName,
+        invoice_number: payment.invoiceNumber,
+        amount: payment.amount,
+        paid_amount: payment.paidAmount,
+        pending_amount: payment.pendingAmount,
+        payment_date: payment.paymentDate,
+        due_date: payment.dueDate,
+        mode: payment.mode,
+        status: payment.status,
+        gst_amount: payment.gstAmount,
+        logo_url: payment.logoUrl || '',
+        custom_logo_text: payment.customLogoText || '',
+        bank_name: payment.bankName || '',
+        bank_acc_no: payment.bankAccNo || '',
+        bank_ifsc: payment.bankIfsc || '',
+        bank_upi: payment.bankUpi || '',
+        service_details: payment.serviceDetails || '',
+        service_description: payment.serviceDescription || '',
+        client_email: payment.clientEmail || '',
+        client_phone: payment.clientPhone || '',
+        our_name: payment.ourName || '',
+        our_phone: payment.ourPhone || '',
+        our_email: payment.ourEmail || '',
+        auto_generated: !!payment.autoGenerated,
+        created_at: payment.paymentDate || new Date().toISOString()
+      };
+      const { error } = await supabase.from('payments').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertPayment failed:', err);
+      throw err;
+    }
+  },
+
+  async deletePayment(userId: string, paymentId: string): Promise<void> {
+    const local = getLocalBackup<Payment[]>('payments', userId, []).filter(p => p.id !== paymentId);
+    setLocalBackup('payments', userId, local);
+
+    try {
+      const { error } = await supabase.from('payments').delete().eq('id', paymentId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deletePayment failed:', err);
+      throw err;
+    }
+  },
+
+  async upsertFinance(userId: string, finance: FinanceLedger): Promise<void> {
+    const local = getLocalBackup<FinanceLedger[]>('finances', userId, []);
+    const idx = local.findIndex(f => f.id === finance.id);
+    if (idx >= 0) local[idx] = finance;
+    else local.push(finance);
+    setLocalBackup('finances', userId, local);
+
+    try {
+      const record = {
+        id: finance.id,
+        user_id: userId,
+        type: finance.type,
+        source_or_name: finance.sourceOrName,
+        category: finance.category,
+        amount: finance.amount,
+        date: finance.date,
+        notes: finance.notes,
+        created_at: finance.date || new Date().toISOString()
+      };
+      const { error } = await supabase.from('finances').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertFinance failed:', err);
+      throw err;
+    }
+  },
+
+  async deleteFinance(userId: string, financeId: string): Promise<void> {
+    const local = getLocalBackup<FinanceLedger[]>('finances', userId, []).filter(f => f.id !== financeId);
+    setLocalBackup('finances', userId, local);
+
+    try {
+      const { error } = await supabase.from('finances').delete().eq('id', financeId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deleteFinance failed:', err);
+      throw err;
+    }
+  },
+
+  async upsertWebsite(userId: string, website: Website): Promise<void> {
+    const local = getLocalBackup<Website[]>('websites', userId, []);
+    const idx = local.findIndex(w => w.id === website.id);
+    if (idx >= 0) local[idx] = website;
+    else local.push(website);
+    setLocalBackup('websites', userId, local);
+
+    try {
+      const record = {
+        id: website.id,
+        user_id: userId,
+        name: website.name,
+        url: website.url,
+        hosting_provider: website.hostingProvider,
+        hosting_price: website.hostingPrice,
+        hosting_bill_date: website.hostingBillDate,
+        domain_registrar: website.domainRegistrar,
+        domain_price: website.domainPrice,
+        domain_bill_date: website.domainBillDate,
+        status: website.status,
+        notes: website.notes,
+        client_id: website.clientId || null,
+        created_at: new Date().toISOString()
+      };
+      const { error } = await supabase.from('websites').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertWebsite failed:', err);
+      throw err;
+    }
+  },
+
+  async deleteWebsite(userId: string, websiteId: string): Promise<void> {
+    const local = getLocalBackup<Website[]>('websites', userId, []).filter(w => w.id !== websiteId);
+    setLocalBackup('websites', userId, local);
+
+    try {
+      const { error } = await supabase.from('websites').delete().eq('id', websiteId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deleteWebsite failed:', err);
+      throw err;
+    }
+  },
+
+  async upsertTimeLog(userId: string, timeLog: TimeLog): Promise<void> {
+    const local = getLocalBackup<TimeLog[]>('timeLogs', userId, []);
+    const idx = local.findIndex(t => t.id === timeLog.id);
+    if (idx >= 0) local[idx] = timeLog;
+    else local.push(timeLog);
+    setLocalBackup('timeLogs', userId, local);
+
+    try {
+      const record = {
+        id: timeLog.id,
+        user_id: userId,
+        project_id: timeLog.projectId,
+        project_name: timeLog.projectName,
+        task_title: timeLog.taskTitle,
+        description: timeLog.description,
+        start_time: timeLog.startTime,
+        end_time: timeLog.endTime,
+        duration_minutes: timeLog.durationMinutes,
+        date: timeLog.date,
+        created_at: timeLog.startTime || new Date().toISOString()
+      };
+      const { error } = await supabase.from('time_logs').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertTimeLog failed:', err);
+      throw err;
+    }
+  },
+
+  async deleteTimeLog(userId: string, logId: string): Promise<void> {
+    const local = getLocalBackup<TimeLog[]>('timeLogs', userId, []).filter(t => t.id !== logId);
+    setLocalBackup('timeLogs', userId, local);
+
+    try {
+      const { error } = await supabase.from('time_logs').delete().eq('id', logId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deleteTimeLog failed:', err);
+      throw err;
+    }
+  },
+
+  async upsertArchivedItem(userId: string, item: ArchivedItem): Promise<void> {
+    const local = getLocalBackup<ArchivedItem[]>('archivedItems', userId, []);
+    const idx = local.findIndex(i => i.id === item.id);
+    if (idx >= 0) local[idx] = item;
+    else local.push(item);
+    setLocalBackup('archivedItems', userId, local);
+
+    try {
+      const record = {
+        id: item.id,
+        user_id: userId,
+        type: item.type,
+        name: item.name,
+        original_data: item.originalData,
+        archived_at: item.archivedAt,
+        created_at: item.archivedAt || new Date().toISOString()
+      };
+      const { error } = await supabase.from('archived_items').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertArchivedItem failed:', err);
+      throw err;
+    }
+  },
+
+  async deleteArchivedItem(userId: string, itemId: string): Promise<void> {
+    const local = getLocalBackup<ArchivedItem[]>('archivedItems', userId, []).filter(i => i.id !== itemId);
+    setLocalBackup('archivedItems', userId, local);
+
+    try {
+      const { error } = await supabase.from('archived_items').delete().eq('id', itemId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deleteArchivedItem failed:', err);
+      throw err;
+    }
+  },
+
+  async upsertReminder(userId: string, reminder: Reminder): Promise<void> {
+    const local = getLocalBackup<Reminder[]>('reminders', userId, []);
+    const idx = local.findIndex(r => r.id === reminder.id);
+    if (idx >= 0) local[idx] = reminder;
+    else local.push(reminder);
+    setLocalBackup('reminders', userId, local);
+
+    try {
+      const record = {
+        id: reminder.id,
+        user_id: userId,
+        type: reminder.type,
+        title: reminder.title,
+        date_time: reminder.dateTime,
+        snoozed_count: reminder.snoozedCount,
+        status: reminder.status,
+        created_at: reminder.dateTime || new Date().toISOString()
+      };
+      const { error } = await supabase.from('reminders').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertReminder failed:', err);
+      throw err;
+    }
+  },
+
+  async deleteReminder(userId: string, reminderId: string): Promise<void> {
+    const local = getLocalBackup<Reminder[]>('reminders', userId, []).filter(r => r.id !== reminderId);
+    setLocalBackup('reminders', userId, local);
+
+    try {
+      const { error } = await supabase.from('reminders').delete().eq('id', reminderId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deleteReminder failed:', err);
+      throw err;
+    }
+  },
+
+  async upsertCalendarEvent(userId: string, event: any): Promise<void> {
+    const local = getLocalBackup<any[]>('calendar', userId, []);
+    const idx = local.findIndex(e => e.id === event.id);
+    if (idx >= 0) local[idx] = event;
+    else local.push(event);
+    setLocalBackup('calendar', userId, local);
+
+    try {
+      const record = {
+        id: event.id,
+        user_id: userId,
+        title: event.title,
+        description: event.description || '',
+        start_time: event.startTime || event.start_time || '',
+        end_time: event.endTime || event.end_time || '',
+        color: event.color || '',
+        created_at: event.createdAt || event.created_at || new Date().toISOString()
+      };
+      const { error } = await supabase.from('calendar').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertCalendarEvent failed:', err);
+      throw err;
+    }
+  },
+
+  async deleteCalendarEvent(userId: string, eventId: string): Promise<void> {
+    const local = getLocalBackup<any[]>('calendar', userId, []).filter(e => e.id !== eventId);
+    setLocalBackup('calendar', userId, local);
+
+    try {
+      const { error } = await supabase.from('calendar').delete().eq('id', eventId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deleteCalendarEvent failed:', err);
+      throw err;
+    }
+  },
+
+  async upsertReport(userId: string, report: any): Promise<void> {
+    const local = getLocalBackup<any[]>('reports', userId, []);
+    const idx = local.findIndex(r => r.id === report.id);
+    if (idx >= 0) local[idx] = report;
+    else local.push(report);
+    setLocalBackup('reports', userId, local);
+
+    try {
+      const record = {
+        id: report.id,
+        user_id: userId,
+        title: report.title,
+        type: report.type,
+        timeframe: report.timeframe || '',
+        metrics: report.metrics || {},
+        created_at: report.createdAt || report.created_at || new Date().toISOString()
+      };
+      const { error } = await supabase.from('reports').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] upsertReport failed:', err);
+      throw err;
+    }
+  },
+
+  async deleteReport(userId: string, reportId: string): Promise<void> {
+    const local = getLocalBackup<any[]>('reports', userId, []).filter(r => r.id !== reportId);
+    setLocalBackup('reports', userId, local);
+
+    try {
+      const { error } = await supabase.from('reports').delete().eq('id', reportId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] deleteReport failed:', err);
+      throw err;
+    }
+  },
+
+  // AI CONVERSATION METHODS
+  async getAIMessages(userId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('ai_conversations')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        if (isTableMissingError(error)) {
+          return getLocalBackup<any[]>('ai_messages', userId, []);
+        }
+        throw error;
+      }
+      return (data || []).map(m => ({
+        id: m.id,
+        role: m.role,
+        text: m.text,
+        timestamp: new Date(m.timestamp)
+      }));
+    } catch (err) {
+      console.warn('[DbService] getAIMessages error, using local fallback:', err);
+      return getLocalBackup<any[]>('ai_messages', userId, []).map((m: any) => ({
+        ...m,
+        timestamp: new Date(m.timestamp)
+      }));
+    }
+  },
+
+  async addAIMessage(userId: string, message: any): Promise<void> {
+    // 1. Cache locally first
+    const local = getLocalBackup<any[]>('ai_messages', userId, []);
+    local.push(message);
+    setLocalBackup('ai_messages', userId, local);
+
+    // 2. Write to Supabase
+    try {
+      const record = {
+        id: message.id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        user_id: userId,
+        role: message.role,
+        text: message.text,
+        timestamp: (message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp)).toISOString(),
+        created_at: new Date().toISOString()
+      };
+      const { error } = await supabase.from('ai_conversations').upsert(record);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] addAIMessage error:', err);
+      throw err;
+    }
+  },
+
+  async clearAIMessages(userId: string): Promise<void> {
+    setLocalBackup('ai_messages', userId, []);
+    try {
+      const { error } = await supabase.from('ai_conversations').delete().eq('user_id', userId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn('[DbService] clearAIMessages error:', err);
+      throw err;
+    }
   }
 };
+

@@ -1,4 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../supabase';
+import { DbService } from '../supabaseService';
 import { 
   Sparkles, X, Send, Bot, User, Loader2, ArrowRightLeft, Check, 
   ChevronRight, AlertCircle, FileText, UserPlus, Briefcase, CheckSquare, Zap
@@ -50,6 +53,7 @@ export default function AIAssistant({
   auditLogs, setAuditLogs,
   profileSettings
 }: AIAssistantProps) {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([
@@ -62,6 +66,139 @@ export default function AIAssistant({
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const isLoadedRef = useRef<boolean>(false);
+  const prevUserEmailRef = useRef<string | null>(null);
+
+  // Restore chat history on startup / user change and subscribe to Supabase Real-time Changes
+  useEffect(() => {
+    if (!user) {
+      isLoadedRef.current = false;
+      setMessages([
+        {
+          id: 'welcome',
+          role: 'assistant',
+          text: "Hello! I am your **GrowInvicta AI Assistant**. I have complete context of your agency workspace.\n\nYou can ask me complex questions about your business, or **command me to do things**! For example, try telling me:\n- *\"Create an invoice of INR 75,000 for Vance Logistics due on July 15th\"*\n- *\"Add a new client named Anjali Verma from Cosmic Devs with a 45,000 monthly retainer\"*\n- *\"Tell me which invoices are currently overdue and what is the total outstanding amount\"*",
+          timestamp: new Date()
+        }
+      ]);
+      return;
+    }
+
+    // 1. Immediately load from local cache for instant visual feedback
+    const key = `growinvicta_chat_history_${user.email?.toLowerCase() || 'default'}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })));
+        }
+      } catch (e) {
+        console.warn('Local cache chat load warning:', e);
+      }
+    }
+
+    let active = true;
+
+    // 2. Fetch latest data from Supabase
+    async function syncAndLoad() {
+      try {
+        const dbMsgs = await DbService.getAIMessages(user.id);
+        if (active) {
+          if (dbMsgs.length > 0) {
+            setMessages(dbMsgs);
+            localStorage.setItem(key, JSON.stringify(dbMsgs));
+          } else {
+            // Seed welcome in DB if empty
+            const welcome = {
+              id: 'welcome',
+              role: 'assistant' as const,
+              text: "Hello! I am your **GrowInvicta AI Assistant**. I have complete context of your agency workspace.\n\nYou can ask me complex questions about your business, or **command me to do things**! For example, try telling me:\n- *\"Create an invoice of INR 75,000 for Vance Logistics due on July 15th\"*\n- *\"Add a new client named Anjali Verma from Cosmic Devs with a 45,000 monthly retainer\"*\n- *\"Tell me which invoices are currently overdue and what is the total outstanding amount\"*",
+              timestamp: new Date()
+            };
+            setMessages([welcome]);
+            localStorage.setItem(key, JSON.stringify([welcome]));
+            await DbService.addAIMessage(user.id, welcome);
+          }
+        }
+      } catch (err) {
+        console.warn('DB AI conversation fetch failed, using offline cache:', err);
+      }
+    }
+
+    syncAndLoad();
+    isLoadedRef.current = true;
+
+    // 3. Real-time subscription to AI conversation changes on Supabase
+    const channel = supabase
+      .channel(`realtime-ai-conversation-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ai_conversations', filter: `user_id=eq.${user.id}` },
+        async (payload) => {
+          console.log('[Realtime AI] Database change detected:', payload);
+          try {
+            const fresh = await DbService.getAIMessages(user.id);
+            if (active) {
+              setMessages(fresh);
+              localStorage.setItem(key, JSON.stringify(fresh));
+            }
+          } catch (err) {
+            console.warn('[Realtime AI] Failed to reload messages:', err);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  // Save chat history to local cache on change
+  useEffect(() => {
+    if (!user || !user.email) return;
+    if (!isLoadedRef.current) return;
+
+    const key = `growinvicta_chat_history_${user.email.toLowerCase()}`;
+    localStorage.setItem(key, JSON.stringify(messages));
+  }, [messages, user]);
+
+  // Clean up storage when user signs out
+  useEffect(() => {
+    if (user) {
+      prevUserEmailRef.current = user.email;
+    } else {
+      if (prevUserEmailRef.current) {
+        const key = `growinvicta_chat_history_${prevUserEmailRef.current.toLowerCase()}`;
+        localStorage.removeItem(key);
+        prevUserEmailRef.current = null;
+      }
+    }
+  }, [user]);
+
+  const handleClearChat = async () => {
+    if (!user || !user.email) return;
+    const key = `growinvicta_chat_history_${user.email.toLowerCase()}`;
+    localStorage.removeItem(key);
+    
+    // Database-first deletion
+    try {
+      await DbService.clearAIMessages(user.id);
+    } catch (err) {
+      console.warn('Failed to clear messages from DB:', err);
+    }
+
+    setMessages([
+      {
+        id: 'welcome',
+        role: 'assistant',
+        text: "Hello! I am your **GrowInvicta AI Assistant**. I have complete context of your agency workspace.\n\nYou can ask me complex questions about your business, or **command me to do things**! For example, try telling me:\n- *\"Create an invoice of INR 75,000 for Vance Logistics due on July 15th\"*\n- *\"Add a new client named Anjali Verma from Cosmic Devs with a 45,000 monthly retainer\"*\n- *\"Tell me which invoices are currently overdue and what is the total outstanding amount\"*",
+        timestamp: new Date()
+      }
+    ]);
+  };
 
   useEffect(() => {
     const handleOpen = () => setIsOpen(true);
@@ -75,7 +212,17 @@ export default function AIAssistant({
     }
   }, [messages, isLoading, isOpen]);
 
-  const executeAction = (action: { type: string; payload: any }) => {
+  // Force scroll to bottom when opening the drawer
+  useEffect(() => {
+    if (isOpen && chatEndRef.current) {
+      const timer = setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  const executeAction = async (action: { type: string; payload: any }) => {
     const { type, payload } = action;
     console.log('[AI Action Triggered]:', type, payload);
 
@@ -108,49 +255,57 @@ export default function AIAssistant({
       };
 
       setPayments(prev => [...prev, paymentObj]);
+      if (user) {
+        DbService.upsertPayment(user.id, paymentObj).catch(err => console.warn('AI Action DB sync failed:', err));
+      }
+
       desc = `Created invoice **${paymentObj.invoiceNumber}** for **${paymentObj.clientName}** worth **₹${(paymentObj.amount + paymentObj.gstAmount).toLocaleString('en-IN')}**.`;
       
       // Auto ledger syncer
       if (paymentObj.paidAmount > 0) {
-        setFinances(prev => [
-          {
-            id: `f_pay_ref_ai_${Date.now()}`,
-            type: 'Income',
-            sourceOrName: `${paymentObj.clientName} - Ref ${paymentObj.invoiceNumber}`,
-            category: 'Client Payments',
-            amount: paymentObj.paidAmount,
-            date: new Date().toISOString().split('T')[0],
-            notes: `Ledger reference sync for AI invoice ${paymentObj.invoiceNumber}`
-          },
-          ...prev
-        ]);
+        const financeObj = {
+          id: `f_pay_ref_ai_${Date.now()}`,
+          type: 'Income' as const,
+          sourceOrName: `${paymentObj.clientName} - Ref ${paymentObj.invoiceNumber}`,
+          category: 'Client Payments',
+          amount: paymentObj.paidAmount,
+          date: new Date().toISOString().split('T')[0],
+          notes: `Ledger reference sync for AI invoice ${paymentObj.invoiceNumber}`
+        };
+        setFinances(prev => [financeObj, ...prev]);
+        if (user) {
+          DbService.upsertFinance(user.id, financeObj).catch(err => console.warn('AI Action DB sync failed:', err));
+        }
       }
 
       // Reminder sync
-      setReminders(prev => [
-        {
-          id: `rem_ai_${Date.now()}`,
-          type: 'Payment Due',
-          title: `AI Invoice Outstanding: ${paymentObj.invoiceNumber} (${paymentObj.clientName})`,
-          dateTime: `${paymentObj.dueDate}T09:00`,
-          snoozedCount: 0,
-          status: 'Active'
-        },
-        ...prev
-      ]);
+      const reminderObj = {
+        id: `rem_ai_${Date.now()}`,
+        type: 'Payment Due' as const,
+        title: `AI Invoice Outstanding: ${paymentObj.invoiceNumber} (${paymentObj.clientName})`,
+        dateTime: `${paymentObj.dueDate}T09:00`,
+        snoozedCount: 0,
+        status: 'Active' as const
+      };
+      setReminders(prev => [reminderObj, ...prev]);
+      if (user) {
+        DbService.upsertReminder(user.id, reminderObj).catch(err => console.warn('AI Action DB sync failed:', err));
+      }
 
       // Audit entry
-      setAuditLogs(prev => [
-        {
-          id: `a_ai_${Date.now()}`,
-          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-          user: 'AI Assistant',
-          role: 'Super Admin',
-          action: 'Invoice Issued',
-          details: `Issued invoice ${paymentObj.invoiceNumber} for ${paymentObj.clientName} (Amount: INR ${paymentObj.amount}).`
-        },
-        ...prev
-      ]);
+      const auditLogObj = {
+        id: `a_ai_${Date.now()}`,
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        user: 'AI Assistant',
+        role: 'Super Admin' as const,
+        action: 'Invoice Issued',
+        details: `Issued invoice ${paymentObj.invoiceNumber} for ${paymentObj.clientName} (Amount: INR ${paymentObj.amount}).`
+      };
+      setAuditLogs(prev => [auditLogObj, ...prev]);
+      // Note: audit logs are currently saved inside saveAuditLogs
+      if (user) {
+        DbService.saveAuditLogs(user.id, [auditLogObj, ...auditLogs]).catch(err => console.warn('AI Action DB sync failed:', err));
+      }
 
     } else if (type === 'CREATE_CLIENT') {
       const clientObj: Client = {
@@ -186,19 +341,24 @@ export default function AIAssistant({
       };
 
       setClients(prev => [...prev, clientObj]);
+      if (user) {
+        DbService.upsertClient(user.id, clientObj).catch(err => console.warn('AI Action DB sync failed:', err));
+      }
+
       desc = `Successfully added new active client **${clientObj.name}** representing **${clientObj.company}**.`;
 
-      setAuditLogs(prev => [
-        {
-          id: `a_ai_${Date.now()}`,
-          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-          user: 'AI Assistant',
-          role: 'Super Admin',
-          action: 'Client Created',
-          details: `Created new client profile for ${clientObj.name} representing ${clientObj.company}.`
-        },
-        ...prev
-      ]);
+      const auditLogObj = {
+        id: `a_ai_${Date.now()}`,
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        user: 'AI Assistant',
+        role: 'Super Admin' as const,
+        action: 'Client Created',
+        details: `Created new client profile for ${clientObj.name} representing ${clientObj.company}.`
+      };
+      setAuditLogs(prev => [auditLogObj, ...prev]);
+      if (user) {
+        DbService.saveAuditLogs(user.id, [auditLogObj, ...auditLogs]).catch(err => console.warn('AI Action DB sync failed:', err));
+      }
 
     } else if (type === 'CREATE_LEAD') {
       const leadObj: Lead = {
@@ -216,19 +376,24 @@ export default function AIAssistant({
       };
 
       setLeads(prev => [...prev, leadObj]);
+      if (user) {
+        DbService.upsertLead(user.id, leadObj).catch(err => console.warn('AI Action DB sync failed:', err));
+      }
+
       desc = `Successfully registered high-intent lead **${leadObj.name}** (**${leadObj.company}**) valued at **₹${leadObj.value.toLocaleString('en-IN')}**.`;
 
-      setAuditLogs(prev => [
-        {
-          id: `a_ai_${Date.now()}`,
-          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-          user: 'AI Assistant',
-          role: 'Super Admin',
-          action: 'Lead Created',
-          details: `Ingested sales opportunity lead for ${leadObj.name} (${leadObj.company}).`
-        },
-        ...prev
-      ]);
+      const auditLogObj = {
+        id: `a_ai_${Date.now()}`,
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        user: 'AI Assistant',
+        role: 'Super Admin' as const,
+        action: 'Lead Created',
+        details: `Ingested sales opportunity lead for ${leadObj.name} (${leadObj.company}).`
+      };
+      setAuditLogs(prev => [auditLogObj, ...prev]);
+      if (user) {
+        DbService.saveAuditLogs(user.id, [auditLogObj, ...auditLogs]).catch(err => console.warn('AI Action DB sync failed:', err));
+      }
 
     } else if (type === 'CREATE_PROJECT') {
       const projectObj: Project = {
@@ -248,19 +413,24 @@ export default function AIAssistant({
       };
 
       setProjects(prev => [...prev, projectObj]);
+      if (user) {
+        DbService.upsertProject(user.id, projectObj).catch(err => console.warn('AI Action DB sync failed:', err));
+      }
+
       desc = `Successfully launched project **${projectObj.name}** for client **${projectObj.clientName}** valued at **₹${projectObj.budget.toLocaleString('en-IN')}**.`;
 
-      setAuditLogs(prev => [
-        {
-          id: `a_ai_${Date.now()}`,
-          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-          user: 'AI Assistant',
-          role: 'Super Admin',
-          action: 'Project Sourced',
-          details: `Launched project node "${projectObj.name}" for client ${projectObj.clientName}.`
-        },
-        ...prev
-      ]);
+      const auditLogObj = {
+        id: `a_ai_${Date.now()}`,
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        user: 'AI Assistant',
+        role: 'Super Admin' as const,
+        action: 'Project Sourced',
+        details: `Launched project node "${projectObj.name}" for client ${projectObj.clientName}.`
+      };
+      setAuditLogs(prev => [auditLogObj, ...prev]);
+      if (user) {
+        DbService.saveAuditLogs(user.id, [auditLogObj, ...auditLogs]).catch(err => console.warn('AI Action DB sync failed:', err));
+      }
 
     } else if (type === 'CREATE_TASK') {
       const taskObj: Task = {
@@ -276,19 +446,24 @@ export default function AIAssistant({
       };
 
       setTasks(prev => [...prev, taskObj]);
+      if (user) {
+        DbService.upsertTask(user.id, taskObj).catch(err => console.warn('AI Action DB sync failed:', err));
+      }
+
       desc = `Assigned task **"${taskObj.title}"** to **${taskObj.assignedTo}** for project **${taskObj.project}**.`;
 
-      setAuditLogs(prev => [
-        {
-          id: `a_ai_${Date.now()}`,
-          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-          user: 'AI Assistant',
-          role: 'Super Admin',
-          action: 'Task Assigned',
-          details: `Created task "${taskObj.title}" assigned to ${taskObj.assignedTo}.`
-        },
-        ...prev
-      ]);
+      const auditLogObj = {
+        id: `a_ai_${Date.now()}`,
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        user: 'AI Assistant',
+        role: 'Super Admin' as const,
+        action: 'Task Assigned',
+        details: `Created task "${taskObj.title}" assigned to ${taskObj.assignedTo}.`
+      };
+      setAuditLogs(prev => [auditLogObj, ...prev]);
+      if (user) {
+        DbService.saveAuditLogs(user.id, [auditLogObj, ...auditLogs]).catch(err => console.warn('AI Action DB sync failed:', err));
+      }
     }
 
     return { type, description: desc, details: payload };
@@ -305,6 +480,9 @@ export default function AIAssistant({
     };
 
     setMessages(prev => [...prev, userMsg]);
+    if (user) {
+      DbService.addAIMessage(user.id, userMsg).catch(err => console.warn('Failed to save AI user message:', err));
+    }
     setInput('');
     setIsLoading(true);
 
@@ -346,10 +524,10 @@ export default function AIAssistant({
       // Execute any actions returned by AI
       const executedList: any[] = [];
       if (data.actions && Array.isArray(data.actions)) {
-        data.actions.forEach((act: any) => {
-          const outcome = executeAction(act);
+        for (const act of data.actions) {
+          const outcome = await executeAction(act);
           if (outcome) executedList.push(outcome);
-        });
+        }
       }
 
       const botMsg: Message = {
@@ -361,17 +539,21 @@ export default function AIAssistant({
       };
 
       setMessages(prev => [...prev, botMsg]);
+      if (user) {
+        DbService.addAIMessage(user.id, botMsg).catch(err => console.warn('Failed to save AI bot message:', err));
+      }
     } catch (err: any) {
       console.error('[AI assistant error]:', err);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: `msg_err_${Date.now()}`,
-          role: 'assistant',
-          text: `⚠️ **Error communicating with AI Assistant**: ${err.message || 'Please verify your API key and internet connection.'}`,
-          timestamp: new Date()
-        }
-      ]);
+      const errMsg: Message = {
+        id: `msg_err_${Date.now()}`,
+        role: 'assistant',
+        text: `⚠️ **Error communicating with AI Assistant**: ${err.message || 'Please verify your API key and internet connection.'}`,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errMsg]);
+      if (user) {
+        DbService.addAIMessage(user.id, errMsg).catch(e => console.warn('Failed to save AI error message:', e));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -405,12 +587,23 @@ export default function AIAssistant({
                   <p className="text-[10px] text-slate-400 font-mono">Workspace Intel & Automation</p>
                 </div>
               </div>
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg cursor-pointer transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {messages.length > 1 && (
+                  <button 
+                    onClick={handleClearChat}
+                    className="px-2 py-1 text-[10px] font-mono font-bold text-slate-400 hover:text-rose-400 hover:bg-slate-900 border border-slate-800 hover:border-rose-950/50 rounded-md transition-all cursor-pointer"
+                    title="Clear Chat History"
+                  >
+                    Clear Chat
+                  </button>
+                )}
+                <button 
+                  onClick={() => setIsOpen(false)}
+                  className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg cursor-pointer transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Chat Conversation Stream */}

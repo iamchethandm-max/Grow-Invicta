@@ -298,7 +298,7 @@ export default function Dashboard({
     <div id="dashboard-module" className="space-y-6 max-w-7xl mx-auto">
       
       {/* GrowInvicta Dynamic Top Greetings Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-sm">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-800 shadow-sm">
         <div>
           <div className="flex items-center gap-2">
             <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 uppercase tracking-wide">
@@ -311,7 +311,7 @@ export default function Dashboard({
           </h1>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-xs font-mono text-slate-300">
+        <div className="flex items-center justify-between sm:justify-start gap-2 bg-slate-950 px-2.5 py-1.5 sm:py-1 rounded-lg border border-slate-800 text-xs font-mono text-slate-300 w-full sm:w-auto">
           <div className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
             <select
