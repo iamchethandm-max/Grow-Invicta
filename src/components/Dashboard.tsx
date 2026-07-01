@@ -33,6 +33,9 @@ export default function Dashboard({
 }: DashboardProps) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarDate, setCalendarDate] = useState(new Date());
+  const [selectedTimezone, setSelectedTimezone] = useState(() => {
+    return localStorage.getItem('growinvicta_timezone') || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+  });
   const [istTime, setIstTime] = useState('');
   const [istDate, setIstDate] = useState('');
   const calendarRef = useRef<HTMLDivElement>(null);
@@ -40,19 +43,35 @@ export default function Dashboard({
   useEffect(() => {
     const updateClock = () => {
       const now = new Date();
-      const timeStr = now.toLocaleTimeString('en-US', {
-        timeZone: 'Asia/Kolkata',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      });
-      const dateStr = now.toLocaleDateString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-      });
+      let timeStr = '';
+      let dateStr = '';
+      try {
+        timeStr = now.toLocaleTimeString('en-US', {
+          timeZone: selectedTimezone,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
+        });
+        dateStr = now.toLocaleDateString('en-IN', {
+          timeZone: selectedTimezone,
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric'
+        });
+      } catch (err) {
+        timeStr = now.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
+        });
+        dateStr = now.toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric'
+        });
+      }
       setIstTime(timeStr);
       setIstDate(dateStr);
     };
@@ -60,7 +79,7 @@ export default function Dashboard({
     updateClock();
     const intervalId = setInterval(updateClock, 1000);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [selectedTimezone]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -96,19 +115,59 @@ export default function Dashboard({
   const overdueTasks = tasks.filter(t => t.status !== 'Completed' && t.dueDate < todayStr).length;
 
   // Revenue analytics - Reflects monthly retainer money (payments) as well as any other works done and added in income (finances ledger)
-  const generalFinanceIncome = finances
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+
+  // Total Revenue - Reset on the 1st of every month (represents current month's revenue)
+  const currentMonthGeneralFinanceIncome = finances
     .filter(f => {
       if (f.type !== 'Income') return false;
       const notes = (f.notes || '').toLowerCase();
       const source = (f.sourceOrName || '').toLowerCase();
       // Avoid counting invoice logs to prevent double counting
-      return !(notes.includes('invoice') || source.includes('invoice'));
+      if (notes.includes('invoice') || source.includes('invoice')) return false;
+      
+      // Filter by current year and current month
+      if (!f.date) return false;
+      const parts = f.date.split('-');
+      return parts[0] === String(currentYear) && parts[1] === currentMonth;
     })
     .reduce((sum, f) => sum + f.amount, 0);
 
   const totalRevenue = payments
-    .filter(p => p.status === 'Paid' || p.status === 'Partial')
-    .reduce((sum, p) => sum + p.paidAmount, 0) + generalFinanceIncome;
+    .filter(p => {
+      if (p.status !== 'Paid' && p.status !== 'Partial') return false;
+      if (!p.paymentDate || p.paymentDate === '--') return false;
+      const parts = p.paymentDate.split('-');
+      return parts[0] === String(currentYear) && parts[1] === currentMonth;
+    })
+    .reduce((sum, p) => sum + p.paidAmount, 0) + currentMonthGeneralFinanceIncome;
+
+  // Yearly Revenue - Reset on January 1st every year (represents current calendar year's revenue)
+  const currentYearGeneralFinanceIncome = finances
+    .filter(f => {
+      if (f.type !== 'Income') return false;
+      const notes = (f.notes || '').toLowerCase();
+      const source = (f.sourceOrName || '').toLowerCase();
+      // Avoid counting invoice logs to prevent double counting
+      if (notes.includes('invoice') || source.includes('invoice')) return false;
+      
+      // Filter by current year
+      if (!f.date) return false;
+      const parts = f.date.split('-');
+      return parts[0] === String(currentYear);
+    })
+    .reduce((sum, f) => sum + f.amount, 0);
+
+  const yearlyRevenue = payments
+    .filter(p => {
+      if (p.status !== 'Paid' && p.status !== 'Partial') return false;
+      if (!p.paymentDate || p.paymentDate === '--') return false;
+      const parts = p.paymentDate.split('-');
+      return parts[0] === String(currentYear);
+    })
+    .reduce((sum, p) => sum + p.paidAmount, 0) + currentYearGeneralFinanceIncome;
 
   // Monthly Revenue - Shows ONLY the total amount from the active retainer clients
   const monthlyRevenue = clients
@@ -212,6 +271,29 @@ export default function Dashboard({
 
   const COLORS = ['#818cf8', '#34d399', '#f59e0b', '#ec4899', '#38bdf8', '#a78bfa', '#fb7185'];
 
+  // Time of day greeting based on selected timezone
+  const nowForGreeting = new Date();
+  let currentHourInTimezone = nowForGreeting.getHours();
+  try {
+    const tzHourStr = nowForGreeting.toLocaleTimeString('en-US', {
+      timeZone: selectedTimezone,
+      hour: 'numeric',
+      hour12: false
+    });
+    currentHourInTimezone = parseInt(tzHourStr, 10);
+  } catch (e) {
+    // Fallback
+  }
+
+  const getGreetingText = (hour: number) => {
+    if (hour >= 5 && hour < 12) return 'Good Morning';
+    if (hour >= 12 && hour < 17) return 'Good Afternoon';
+    if (hour >= 17 && hour < 22) return 'Good Evening';
+    return 'Good Night';
+  };
+
+  const greeting = getGreetingText(isNaN(currentHourInTimezone) ? new Date().getHours() : currentHourInTimezone);
+
   return (
     <div id="dashboard-module" className="space-y-6 max-w-7xl mx-auto">
       
@@ -225,14 +307,71 @@ export default function Dashboard({
             <span className="text-slate-400 text-xs font-mono">Run Mode: Super Admin</span>
           </div>
           <h1 className="text-2xl font-bold text-white mt-1.5 font-sans tracking-tight">
-            Welcome back, {currentUsername}
+            {greeting}, {currentUsername}
           </h1>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5 bg-slate-950 px-3.5 py-2.5 rounded-xl border border-slate-800 text-xs font-mono text-slate-300">
-          <div className="flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="text-[10px] text-indigo-400 font-semibold tracking-wider uppercase">IST Clock</span>
+        <div className="flex items-center gap-2 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-xs font-mono text-slate-300">
+          <div className="flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <select
+              value={selectedTimezone}
+              onChange={(e) => {
+                setSelectedTimezone(e.target.value);
+                localStorage.setItem('growinvicta_timezone', e.target.value);
+              }}
+              className="bg-transparent text-[10px] text-indigo-400 font-semibold tracking-wider uppercase focus:outline-none cursor-pointer border-none p-0 pr-1 hover:text-indigo-300 font-mono transition-colors max-w-[110px] sm:max-w-[140px] truncate"
+              title="Change Timezone"
+            >
+              <option value={Intl.DateTimeFormat().resolvedOptions().timeZone} className="bg-slate-950 text-slate-300">Auto ({Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop()?.replace('_', ' ') || 'Local'})</option>
+              
+              <optgroup label="AMERICAS" className="bg-slate-950 text-slate-400 font-semibold">
+                <option value="America/New_York" className="bg-slate-950 text-slate-300">USA - New York (EST/EDT)</option>
+                <option value="America/Chicago" className="bg-slate-950 text-slate-300">USA - Chicago (CST/CDT)</option>
+                <option value="America/Denver" className="bg-slate-950 text-slate-300">USA - Denver (MST/MDT)</option>
+                <option value="America/Los_Angeles" className="bg-slate-950 text-slate-300">USA - Los Angeles (PST/PDT)</option>
+                <option value="America/Toronto" className="bg-slate-950 text-slate-300">Canada - Toronto</option>
+                <option value="America/Vancouver" className="bg-slate-950 text-slate-300">Canada - Vancouver</option>
+                <option value="America/Mexico_City" className="bg-slate-950 text-slate-300">Mexico - Mexico City</option>
+                <option value="America/Sao_Paulo" className="bg-slate-950 text-slate-300">Brazil - Sao Paulo</option>
+                <option value="America/Argentina/Buenos_Aires" className="bg-slate-950 text-slate-300">Argentina - Buenos Aires</option>
+              </optgroup>
+
+              <optgroup label="EUROPE" className="bg-slate-950 text-slate-400 font-semibold">
+                <option value="Europe/London" className="bg-slate-950 text-slate-300">UK - London (GMT/BST)</option>
+                <option value="Europe/Paris" className="bg-slate-950 text-slate-300">France - Paris</option>
+                <option value="Europe/Berlin" className="bg-slate-950 text-slate-300">Germany - Berlin</option>
+                <option value="Europe/Rome" className="bg-slate-950 text-slate-300">Italy - Rome</option>
+                <option value="Europe/Madrid" className="bg-slate-950 text-slate-300">Spain - Madrid</option>
+                <option value="Europe/Moscow" className="bg-slate-950 text-slate-300">Russia - Moscow</option>
+              </optgroup>
+
+              <optgroup label="ASIA & MIDDLE EAST" className="bg-slate-950 text-slate-400 font-semibold">
+                <option value="Asia/Kolkata" className="bg-slate-950 text-slate-300">India - Kolkata (IST)</option>
+                <option value="Asia/Dubai" className="bg-slate-950 text-slate-300">UAE - Dubai</option>
+                <option value="Asia/Riyadh" className="bg-slate-950 text-slate-300">Saudi Arabia - Riyadh</option>
+                <option value="Asia/Singapore" className="bg-slate-950 text-slate-300">Singapore</option>
+                <option value="Asia/Shanghai" className="bg-slate-950 text-slate-300">China - Shanghai</option>
+                <option value="Asia/Tokyo" className="bg-slate-950 text-slate-300">Japan - Tokyo</option>
+                <option value="Asia/Seoul" className="bg-slate-950 text-slate-300">South Korea - Seoul</option>
+                <option value="Asia/Jakarta" className="bg-slate-950 text-slate-300">Indonesia - Jakarta</option>
+                <option value="Asia/Karachi" className="bg-slate-950 text-slate-300">Pakistan - Karachi</option>
+                <option value="Asia/Dhaka" className="bg-slate-950 text-slate-300">Bangladesh - Dhaka</option>
+              </optgroup>
+
+              <optgroup label="OCEANIA" className="bg-slate-950 text-slate-400 font-semibold">
+                <option value="Australia/Sydney" className="bg-slate-950 text-slate-300">Australia - Sydney</option>
+                <option value="Australia/Melbourne" className="bg-slate-950 text-slate-300">Australia - Melbourne</option>
+                <option value="Pacific/Auckland" className="bg-slate-950 text-slate-300">New Zealand - Auckland</option>
+              </optgroup>
+
+              <optgroup label="AFRICA" className="bg-slate-950 text-slate-400 font-semibold">
+                <option value="Africa/Johannesburg" className="bg-slate-950 text-slate-300">South Africa - Johannesburg</option>
+                <option value="Africa/Cairo" className="bg-slate-950 text-slate-300">Egypt - Cairo</option>
+                <option value="Africa/Lagos" className="bg-slate-950 text-slate-300">Nigeria - Lagos</option>
+                <option value="Africa/Nairobi" className="bg-slate-950 text-slate-300">Kenya - Nairobi</option>
+              </optgroup>
+            </select>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-white font-semibold tabular-nums">{istTime}</span>
@@ -302,7 +441,22 @@ export default function Dashboard({
                       
                       const today = new Date();
                       for (let d = 1; d <= totalDays; d++) {
-                        const isToday = today.getDate() === d && today.getMonth() === month && today.getFullYear() === year;
+                        let isToday = false;
+                        try {
+                          const tzParts = new Intl.DateTimeFormat('en-US', {
+                            timeZone: selectedTimezone,
+                            year: 'numeric',
+                            month: 'numeric',
+                            day: 'numeric'
+                          }).formatToParts(today);
+
+                          const tzYear = parseInt(tzParts.find(p => p.type === 'year')?.value || '', 10);
+                          const tzMonth = parseInt(tzParts.find(p => p.type === 'month')?.value || '', 10) - 1; // 0-indexed month
+                          const tzDay = parseInt(tzParts.find(p => p.type === 'day')?.value || '', 10);
+                          isToday = tzDay === d && tzMonth === month && tzYear === year;
+                        } catch (err) {
+                          isToday = today.getDate() === d && today.getMonth() === month && today.getFullYear() === year;
+                        }
                         cells.push(
                           <div 
                             key={`day-${d}`} 
@@ -328,29 +482,6 @@ export default function Dashboard({
 
       {/* Primary KPI Grid (11 interactive cards rearranged) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-        {/* Total Revenue */}
-        {enabledFeatures.payments && (
-          <div 
-            onClick={() => onNavigate('payments')}
-            className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-indigo-400 transition-all cursor-pointer group"
-            id="kpi-total-revenue"
-          >
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-xs font-medium text-slate-400">Total Revenue</span>
-              <span className="p-1.5 bg-slate-950 rounded-lg text-indigo-400">
-                <TrendingUp className="w-4 h-4" />
-              </span>
-            </div>
-            <div className="text-xl font-bold text-white tracking-tight flex items-center gap-0.5">
-              <span className="text-sm font-normal text-slate-400">₹</span>
-              {totalRevenue.toLocaleString('en-IN')}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1">
-              Total ledger receipts
-            </div>
-          </div>
-        )}
-
         {/* Monthly Revenue */}
         {enabledFeatures.payments && (
           <div 
@@ -370,6 +501,52 @@ export default function Dashboard({
             </div>
             <div className="text-[10px] text-slate-400 mt-1">
               Active retainer clients value
+            </div>
+          </div>
+        )}
+
+        {/* Total Revenue */}
+        {enabledFeatures.payments && (
+          <div 
+            onClick={() => onNavigate('payments')}
+            className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-indigo-400 transition-all cursor-pointer group"
+            id="kpi-total-revenue"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-medium text-slate-400">Total Revenue (Monthly)</span>
+              <span className="p-1.5 bg-slate-950 rounded-lg text-indigo-400">
+                <TrendingUp className="w-4 h-4" />
+              </span>
+            </div>
+            <div className="text-xl font-bold text-white tracking-tight flex items-center gap-0.5">
+              <span className="text-sm font-normal text-slate-400">₹</span>
+              {totalRevenue.toLocaleString('en-IN')}
+            </div>
+            <div className="text-[10px] text-emerald-400 mt-1 font-medium">
+              Resets 1st of every month
+            </div>
+          </div>
+        )}
+
+        {/* Yearly Revenue */}
+        {enabledFeatures.payments && (
+          <div 
+            onClick={() => onNavigate('payments')}
+            className="p-4 bg-slate-900 rounded-xl border border-slate-800 shadow-sm hover:border-violet-400 transition-all cursor-pointer group"
+            id="kpi-yearly-revenue"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-medium text-slate-400">Yearly Revenue</span>
+              <span className="p-1.5 bg-slate-950 rounded-lg text-violet-400">
+                <IndianRupee className="w-3.5 h-3.5" />
+              </span>
+            </div>
+            <div className="text-xl font-bold text-white tracking-tight flex items-center gap-0.5">
+              <span className="text-sm font-normal text-slate-400">₹</span>
+              {yearlyRevenue.toLocaleString('en-IN')}
+            </div>
+            <div className="text-[10px] text-violet-400 mt-1 font-medium">
+              Resets 1st of Jan every year
             </div>
           </div>
         )}
@@ -575,7 +752,7 @@ export default function Dashboard({
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />
-                <span className="text-slate-300">Expenses</span>
+                <span className="text-slate-300">Billing & Expenses</span>
               </div>
             </div>
           </div>

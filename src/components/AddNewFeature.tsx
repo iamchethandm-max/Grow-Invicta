@@ -45,7 +45,7 @@ export default function AddNewFeature({ theme, enabledFeatures, onToggleFeature 
     },
     {
       id: 'payments',
-      label: 'Expenses Ledger',
+      label: 'Billing & Expenses',
       desc: 'Durable accounting log tracking internal expenditures, general ledgers, categorized outflows, and cash trends.',
       icon: IndianRupee,
       color: 'from-rose-500 to-red-500'

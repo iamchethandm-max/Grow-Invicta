@@ -78,7 +78,7 @@ export default function HowToUse({ theme, onClose }: HowToUseProps) {
     },
     {
       id: 'payments',
-      title: 'Expenses',
+      title: 'Billing & Expenses',
       icon: IndianRupee,
       desc: 'Integrated general accounting ledger.',
       what: 'Tracks internal finances, general ledgers, corporate revenues, and categorized expenses.',

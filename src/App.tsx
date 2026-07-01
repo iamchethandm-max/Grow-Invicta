@@ -1217,7 +1217,7 @@ export default function App() {
                   { id: 'leads', label: 'Prospective Leads', icon: Sparkles, featureKey: 'leads' },
                   { id: 'projects', label: 'Projects Kanban', icon: Briefcase },
                   { id: 'timetracker', label: 'Time Tracker', icon: Clock, featureKey: 'timetracker' },
-                  { id: 'payments', label: 'Expenses', icon: IndianRupee, featureKey: 'payments' },
+                  { id: 'payments', label: 'Billing & Expenses', icon: IndianRupee, featureKey: 'payments' },
                   { id: 'websites', label: 'Websites Manager', icon: Globe, featureKey: 'websites' },
                   { id: 'calendar', label: 'Calendar Planner', icon: Calendar, featureKey: 'calendar' },
                   { id: 'settings', label: 'Settings', icon: Settings }
